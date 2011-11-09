@@ -32,6 +32,9 @@ typedef enum {
 } NodeType;
 
 template <typename KEY>
+typedef RC (*ReadNode)(BTreeNode<KEY>*, const unsigned, const NodeType);
+
+template <typename KEY>
 struct BTreeNode {
 	NodeType type;
 	BTreeNode<KEY>* parent;
@@ -44,6 +47,8 @@ struct BTreeNode {
 	vector<BTreeNode<KEY>*> children;
 
 	int pageNum;	// -1 indicates unsaved page
+	int leftPageNum;	// -1 means no left page; this is the most left one
+	int rightPageNum;	// -1 means no right page; this is the most right one
 	vector<int> childrenPageNums;
 };
 
@@ -59,17 +64,19 @@ public:
 	RC DeleteEntry(const KEY key);
 	RC DeleteTree();
 
-	RC BuildNode(void *page);
+	RC BuildNode(const void *page);
+	void SetReadNodeFunc(ReadNode func);
 
 protected:
-	RC SearchNode(const BTreeNode<KEY> *node, KEY key, BTreeNode<KEY> *leafNode, unsigned &pos);
-	RC insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
-	RC insert(const BTreeNode<KEY> *rightNode);
+	RC SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos);
+	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
+	RC Insert(const BTreeNode<KEY> *rightNode);
 
 private:
 	BTreeNode<KEY>* _root;
 	unsigned _order;
 	unsigned _level;
+	ReadNode _func_ReadNode;
 };
 
 /******************** Tree Structure ********************/
@@ -111,12 +118,17 @@ class IX_IndexHandle {
   RC InsertEntry(void *key, const RID &rid);  // Insert new index entry
   RC DeleteEntry(void *key, const RID &rid);  // Delete index entry
 
-  RC Open(PF_FileHandle *handle);
+  RC Open(PF_FileHandle *handle, string keyType);
   RC Close();
   PF_FileHandle* GetFileHandle();
 
+ protected:
+  template <typename KEY>
+  RC ReadNode(BTreeNode<KEY> *node, const unsigned pageNum, const NodeType type);
+
  private:
   PF_FileHandle *_pf_handle;
+  string _key_type;
 };
 
 
