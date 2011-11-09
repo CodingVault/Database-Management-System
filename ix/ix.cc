@@ -140,7 +140,7 @@ RC BTree<KEY>::SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsig
 				if (node->children[index] == NULL)
 				{
 					NodeType nodeType = depth > 2 ? NON_LEAF_NODE : LEAF_NODE;
-					this->_func_ReadNode(node->children[index], node->childrenPageNums[index], nodeType);
+					this->_func_ReadIntNode(node->children[index], node->childrenPageNums[index], nodeType);
 				}
 				SearchNode(node->children[index], key, depth - 1, leafNode, pos);
 			}
@@ -336,6 +336,11 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle)  // close index
 
 /********************* IX_IndexHandle Start *********************/
 
+IX_IndexHandle::IX_IndexHandle()
+{
+
+}
+
 RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)  // Insert new index entry
 {
 
@@ -379,6 +384,8 @@ RC IX_IndexHandle::ReadNode(BTreeNode<KEY> *node, const unsigned pageNum, const 
 	{
 		node = new BTreeNode<int>;
 	}
+
+	return SUCCESS;
 }
 
 /********************* IX_IndexHandle End *********************/

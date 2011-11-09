@@ -32,9 +32,6 @@ typedef enum {
 } NodeType;
 
 template <typename KEY>
-typedef RC (*ReadNode)(BTreeNode<KEY>*, const unsigned, const NodeType);
-
-template <typename KEY>
 struct BTreeNode {
 	NodeType type;
 	BTreeNode<KEY>* parent;
@@ -52,6 +49,10 @@ struct BTreeNode {
 	vector<int> childrenPageNums;
 };
 
+// Read given page number as given node type to the BTreeNode
+typedef RC (*ReadIntNode)(BTreeNode<int>*, const unsigned, const NodeType);
+typedef RC (*ReadFloatNode)(BTreeNode<float>*, const unsigned, const NodeType);
+
 template <typename KEY>
 class BTree {
 public:
@@ -65,7 +66,7 @@ public:
 	RC DeleteTree();
 
 	RC BuildNode(const void *page);
-	void SetReadNodeFunc(ReadNode func);
+	void SetReadIntNodeFunc(ReadIntNode func);
 
 protected:
 	RC SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos);
@@ -76,7 +77,7 @@ private:
 	BTreeNode<KEY>* _root;
 	unsigned _order;
 	unsigned _level;
-	ReadNode _func_ReadNode;
+	ReadIntNode _func_ReadIntNode;
 };
 
 /******************** Tree Structure ********************/
