@@ -80,11 +80,6 @@ public:
 	RC DeleteTree();
 
 	RC BuildNode(const void *page);
-//	void SetReadNodeFunc(BTreeNode<KEY>* (*_fun_ReadNode)(const unsigned, const NodeType) func);
-//	void SetLevel(const unsigned level);
-//	unsigned GetLevel() const;
-//	void SetReadIntNodeFunc(const ReadIntNode func);
-//	void SetReadFloatNodeFunc(const ReadFloatNode func);
 
 protected:
 	BTree();
@@ -145,9 +140,6 @@ class IX_IndexHandle {
   RC InitTree(BTree<KEY> *tree, const KEY key, const RID &rid);
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType type);
-//  // cannot use template to define function pointer, so have to implement the following functions for each type
-//  BTreeNode<int>* ReadIntNode(const unsigned pageNum, const NodeType type);
-//  BTreeNode<float>* ReadFloatNode(const unsigned pageNum, const NodeType type);
 
  private:
   PF_FileHandle *_pf_handle;

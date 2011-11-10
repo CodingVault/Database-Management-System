@@ -284,18 +284,6 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 
 /* ================== Public Functions End ================== */
 
-//template <typename KEY>
-//void BTree<KEY>::SetReadIntNodeFunc(const ReadIntNode func)
-//{
-//	this->_func_ReadIntNode = func;
-//}
-//
-//template <typename KEY>
-//void BTree<KEY>::SetReadFloatNodeFunc(const ReadFloatNode func)
-//{
-//	this->_func_ReadFloatNode = func;
-//}
-
 template <typename KEY>
 RC BTree<KEY>::SearchEntry(const KEY key, BTreeNode<KEY> *leafNode, unsigned &pos)
 {
@@ -327,18 +315,6 @@ RC BTree<KEY>::DeleteTree()
 {
 	return SUCCESS;
 }
-
-//template <typename KEY>
-//void BTree<KEY>::SetLevel(const unsigned level)
-//{
-//	this->_level = level;
-//}
-//
-//template <typename KEY>
-//unsigned BTree<KEY>::GetLevel() const
-//{
-//	return this->_level;
-//}
 
 /* ================== Public Functions End ================== */
 
@@ -504,16 +480,6 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)  // Insert new index e
 	}
 	return SUCCESS;
 }
-
-//BTreeNode<int>* IX_IndexHandle::ReadIntNode(const unsigned pageNum, const NodeType type)
-//{
-//	return ReadNode<int>(pageNum, type);
-//}
-//
-//BTreeNode<float>* IX_IndexHandle::ReadFloatNode(const unsigned pageNum, const NodeType type)
-//{
-//	return ReadNode<float>(pageNum, type);
-//}
 
 RC IX_IndexHandle::Open(PF_FileHandle *handle, string keyType)
 {
