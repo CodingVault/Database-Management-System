@@ -22,6 +22,8 @@ typedef enum {
 	FILE_NOT_FOUND = -3,
 } ReturnCode;
 
+class IX_IndexHandle;
+
 /******************** Tree Structure ********************/
 
 #define DEFAULT_ORDER 10
@@ -50,14 +52,26 @@ struct BTreeNode {
 };
 
 // Read given page number as given node type to the BTreeNode
-typedef RC (*ReadIntNode)(BTreeNode<int>*, const unsigned, const NodeType);
-typedef RC (*ReadFloatNode)(BTreeNode<float>*, const unsigned, const NodeType);
+typedef BTreeNode<int>* (*ReadIntNode)(const unsigned, const NodeType);
+typedef BTreeNode<float>* (*ReadFloatNode)(const unsigned, const NodeType);
+
+template <typename Class, typename KEY>
+class Functor
+{
+public:
+	Functor(Class *obj, BTreeNode<KEY>* (Class::*func)(const unsigned, const NodeType)) : _obj(obj), _readNode(func) {};
+	BTreeNode<KEY>* operator()(const unsigned pageNum, const NodeType nodeType) { return (*_obj.*_readNode)(pageNum, nodeType); };
+
+private:
+	Class *_obj;
+	BTreeNode<KEY>* (Class::*_readNode)(const unsigned, const NodeType);
+};
 
 template <typename KEY>
 class BTree {
 public:
-	BTree();
-	BTree(const unsigned order);
+	BTree(const unsigned order, const KEY key, const RID &rid, IX_IndexHandle *ixHandle, BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType));		// grow a tree from the beginning
+	BTree(BTreeNode<KEY> *root, const unsigned order, const unsigned level, IX_IndexHandle *ixHandle, BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType));	// initialize a tree with given root node
 	~BTree();
 
 	RC SearchEntry(const KEY key, BTreeNode<KEY> *leafNode, unsigned &pos);
@@ -66,23 +80,26 @@ public:
 	RC DeleteTree();
 
 	RC BuildNode(const void *page);
-	void SetReadIntNodeFunc(ReadIntNode func);
+//	void SetReadNodeFunc(BTreeNode<KEY>* (*_fun_ReadNode)(const unsigned, const NodeType) func);
+//	void SetLevel(const unsigned level);
+//	unsigned GetLevel() const;
+//	void SetReadIntNodeFunc(const ReadIntNode func);
+//	void SetReadFloatNodeFunc(const ReadFloatNode func);
 
 protected:
-	RC SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos);
+	BTree();
+	RC SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos);
 	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
-	RC Insert(const BTreeNode<KEY> *rightNode);
+	RC Insert(BTreeNode<KEY> *rightNode);
 
 private:
 	BTreeNode<KEY>* _root;
 	unsigned _order;
 	unsigned _level;
-	ReadIntNode _func_ReadIntNode;
+	Functor<IX_IndexHandle, KEY> _func_ReadNode;
 };
 
 /******************** Tree Structure ********************/
-
-class IX_IndexHandle;
 
 class IX_Manager {
  public:
@@ -125,11 +142,19 @@ class IX_IndexHandle {
 
  protected:
   template <typename KEY>
-  RC ReadNode(BTreeNode<KEY> *node, const unsigned pageNum, const NodeType type);
+  RC InitTree(BTree<KEY> *tree, const KEY key, const RID &rid);
+  template <typename KEY>
+  BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType type);
+//  // cannot use template to define function pointer, so have to implement the following functions for each type
+//  BTreeNode<int>* ReadIntNode(const unsigned pageNum, const NodeType type);
+//  BTreeNode<float>* ReadFloatNode(const unsigned pageNum, const NodeType type);
 
  private:
   PF_FileHandle *_pf_handle;
   string _key_type;
+  unsigned _occupancy;
+  BTree<int> *_int_index;
+  BTree<float> *_float_index;
 };
 
 

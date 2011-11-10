@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include <cassert>
 
 #include "ix.h"
 
@@ -52,6 +53,47 @@ void writeNode(PF_FileHandle &handle, const BTreeNode<KEY> *node)
 	return 0;
 }
 
+template <typename KEY>
+void InitRootNode(BTreeNode<KEY> *root, const NodeType nodeType, const KEY key)
+{
+	root->type = nodeType;
+	root->parent = NULL;
+	root->left = NULL;
+	root->right = NULL;
+	root->pos = 0;	// must be set as 0; while splitting, its position in new root does be 0
+	root->keys.push_back(key);
+	root->pageNum = -1;
+	root->leftPageNum = -1;
+	root->rightPageNum = -1;
+}
+
+// TODO: LOW! can be re-factored as private member function to update this->_root directly
+/**
+ * Grows root as a leaf node.
+ */
+template <typename KEY>
+BTreeNode<KEY>* InitRootNode(const KEY key, const RID &rid)
+{
+	BTreeNode<KEY> *root = new BTreeNode<KEY>;
+	root->rids.push_back(rid);
+	InitRootNode(root, LEAF_NODE, key);
+	return root;
+}
+
+// TODO: LOW! can be re-factored as private member function to update this->_root directly
+/**
+ * Grows root as a new non-leaf node.
+ */
+template <typename KEY>
+BTreeNode<KEY>* InitRootNode(const KEY key, BTreeNode<KEY> *child)
+{
+	BTreeNode<KEY> *root = new BTreeNode<KEY>;
+	root->children.push_back(child);
+	root->childrenPageNums.push_back(child->pageNum);
+	InitRootNode(root, NON_LEAF_NODE, key);
+	return root;
+}
+
 /**************************************/
 
 /********************* Tree Structure Begin *********************/
@@ -59,20 +101,25 @@ void writeNode(PF_FileHandle &handle, const BTreeNode<KEY> *node)
 template <typename KEY>
 BTree<KEY>::BTree()
 {
-	BTree(DEFAULT_ORDER);
+	KEY key;
+	RID rid;
+	rid.pageNum = 0;
+	rid.slotNum = 0;
+	BTree(DEFAULT_ORDER, key, rid);
 }
 
 template <typename KEY>
-BTree<KEY>::BTree(const unsigned order)
+BTree<KEY>::BTree(const unsigned order, const KEY key, const RID &rid, IX_IndexHandle *ixHandle,
+		BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType))
+		: _root(InitRootNode<KEY>(key, rid)), _order(order), _level(1), _func_ReadNode(ixHandle, func)
 {
-	this->_level = 0;
-	this->_order = order;
+}
 
-	this->_root = new BTreeNode<KEY>;
-	this->_root->parent = NULL;
-	this->_root->pageNum = 0;
-	this->_root->leftPageNum = 1;
-	this->_root->rightPageNum = 2;
+template <typename KEY>
+BTree<KEY>::BTree(BTreeNode<KEY> *root, const unsigned order, const unsigned level,
+		IX_IndexHandle *ixHandle, BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType))
+		: _root(root), _order(order), _level(level), _func_ReadNode(ixHandle, func)
+{
 }
 
 template <typename KEY>
@@ -109,12 +156,12 @@ void split(const unsigned order, BTreeNode<KEY> *splitee, BTreeNode<KEY> *newNod
  * @return pos is the position of the given key in leaf node, or position for insertion if not found.
  */
 template <typename KEY>
-RC BTree<KEY>::SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos)
+RC BTree<KEY>::SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos)
 {
 	if (node->type == LEAF_NODE)		// reach leaf node
 	{
 		leafNode = node;
-		for (unsigned index = 0; index < node->keys->size(); index++)
+		for (unsigned index = 0; index < node->keys.size(); index++)
 		{
 			if (key == node->keys[index])
 			{
@@ -127,20 +174,20 @@ RC BTree<KEY>::SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsig
 				return RECORD_NOT_FOUND;
 			}
 		}
-		pos = node->keys->size();	// position for insertion
+		pos = node->keys.size();	// position for insertion
 		return RECORD_NOT_FOUND;
 	}
 	else	// non-leaf node
 	{
 		unsigned index = 0;
-		while (index < node->keys->size())
+		while (index < node->keys.size())
 		{
 			if (node->keys[index] > key)	// <: go left; >=: go right
 			{
 				if (node->children[index] == NULL)
 				{
 					NodeType nodeType = depth > 2 ? NON_LEAF_NODE : LEAF_NODE;
-					this->_func_ReadIntNode(node->children[index], node->childrenPageNums[index], nodeType);
+					node->children[index] = this->_func_ReadNode(node->childrenPageNums[index], nodeType);
 				}
 				SearchNode(node->children[index], key, depth - 1, leafNode, pos);
 			}
@@ -151,6 +198,7 @@ RC BTree<KEY>::SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsig
 			}
 		}
 		SearchNode(node->children[index], key, depth - 1, leafNode, pos);	// index = node->keys->size() = node->children->size() - 1
+		return SUCCESS;
 	}
 }
 
@@ -160,10 +208,10 @@ RC BTree<KEY>::SearchNode(const BTreeNode<KEY> *node, const KEY key, const unsig
 template <typename KEY>
 RC BTree<KEY>::Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos)
 {
-	typename vector<KEY>::iterator itKey = leafNode->keys->begin() + pos;
-	leafNode->keys->insert(itKey, key);
-	vector<RID>::iterator itRID = leafNode->children->begin() + pos;
-	leafNode->children->insert(itRID, rid);
+	typename vector<KEY>::iterator itKey = leafNode->keys.begin() + pos;
+	leafNode->keys.insert(itKey, key);
+	vector<RID>::iterator itRID = leafNode->rids.begin() + pos;
+	leafNode->rids.insert(itRID, rid);
 
 	if (leafNode->keys.size() > this->_order * 2)	// need to split
 	{
@@ -188,11 +236,18 @@ RC BTree<KEY>::Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, c
  * Inserts split node to parent node; recursive to parent's ancestor nodes if necessary.
  */
 template <typename KEY>
-RC BTree<KEY>::Insert(const BTreeNode<KEY> *rightNode)
+RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 {
 	const KEY key = rightNode->keys[0];
 	BTreeNode<KEY> *parent = rightNode->parent;
 
+	if (parent == NULL)		// reach root
+	{
+		this->_root = InitRootNode<KEY>(key, rightNode->left);
+		parent = this->_root;
+	}
+
+	// update parent node
 	typename vector<KEY>::iterator itKey = parent->keys.begin() + rightNode->pos;
 	parent->keys.insert(itKey, key);
 
@@ -213,8 +268,9 @@ RC BTree<KEY>::Insert(const BTreeNode<KEY> *rightNode)
 
 		// update new node -- the right one
 		newNode->type = NON_LEAF_NODE;
-		newNode->children = vector<RID>(parent->children.begin() + this->_order + 1, parent->children.end());
-		newNode->childrenPageNums = vector<RID>(parent->childrenPageNums.begin() + this->_order + 1,
+		newNode->children.insert(newNode->children.begin(), parent->children.begin() + this->_order + 1, parent->children.end());
+		newNode->childrenPageNums.insert(newNode->childrenPageNums.begin(),
+				parent->childrenPageNums.begin() + this->_order + 1,
 				parent->childrenPageNums.end());
 
 		// update parent
@@ -227,6 +283,18 @@ RC BTree<KEY>::Insert(const BTreeNode<KEY> *rightNode)
 /* ================== Protected Functions End ================== */
 
 /* ================== Public Functions End ================== */
+
+//template <typename KEY>
+//void BTree<KEY>::SetReadIntNodeFunc(const ReadIntNode func)
+//{
+//	this->_func_ReadIntNode = func;
+//}
+//
+//template <typename KEY>
+//void BTree<KEY>::SetReadFloatNodeFunc(const ReadFloatNode func)
+//{
+//	this->_func_ReadFloatNode = func;
+//}
 
 template <typename KEY>
 RC BTree<KEY>::SearchEntry(const KEY key, BTreeNode<KEY> *leafNode, unsigned &pos)
@@ -260,22 +328,34 @@ RC BTree<KEY>::DeleteTree()
 	return SUCCESS;
 }
 
+//template <typename KEY>
+//void BTree<KEY>::SetLevel(const unsigned level)
+//{
+//	this->_level = level;
+//}
+//
+//template <typename KEY>
+//unsigned BTree<KEY>::GetLevel() const
+//{
+//	return this->_level;
+//}
+
 /* ================== Public Functions End ================== */
 
 /********************* Tree Structure End *********************/
 
 /********************* IX_Manager Begin *********************/
 
+IX_Manager::IX_Manager()
+{
+	_pf_manager = PF_Manager::Instance();
+}
+
 IX_Manager* IX_Manager::Instance()
 {
 	if (!_ix_manager)
 		_ix_manager = new IX_Manager;
 	return _ix_manager;
-}
-
-IX_Manager::IX_Manager()
-{
-	_pf_manager = PF_Manager::Instance();
 }
 
 RC IX_Manager::CreateIndex(const string tableName,       // create new index
@@ -338,14 +418,102 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle)  // close index
 
 IX_IndexHandle::IX_IndexHandle()
 {
+	this->_pf_handle = NULL;
+	this->_key_type = "";
+	this->_int_index = NULL;
+	this->_float_index = NULL;
+}
 
+IX_IndexHandle::~IX_IndexHandle()
+{
+	if (this->_int_index != NULL)
+		delete this->_int_index;
+	if (this->_float_index != NULL)
+		delete this->_float_index;
+}
+
+template <typename KEY>
+BTreeNode<KEY>* IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType type)
+{
+	void *page = malloc(PF_PAGE_SIZE);
+//	this->_pf_handle->ReadPage(pageNum, page);
+	BTreeNode<KEY> *node;
+
+//	if (type == LEAF_NODE)
+
+	free(page);
+	return node;
+}
+
+template <typename KEY>
+RC IX_IndexHandle::InitTree(BTree<KEY> *tree, const KEY key, const RID &rid)
+{
+	unsigned totalPageNum = this->_pf_handle->GetNumberOfPages();
+	if (totalPageNum == 0)
+	{
+		cout << "InitTree - Initializing a tree with key [" << key << "] and rid [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+		tree = new BTree<KEY>(DEFAULT_ORDER, key, rid, this, &IX_IndexHandle::ReadNode<KEY>);
+		// TODO: update this->occupancy
+		// TODO: write page back
+		return SUCCESS;
+	}
+
+	void *page = malloc(PF_PAGE_SIZE);
+	this->_pf_handle->ReadPage(0, page);
+	unsigned offset = 0;
+
+	unsigned rootPageNum = 0;
+	memcpy(&rootPageNum, (char *)page + offset, 4);
+	offset += 4;
+	unsigned level = 0;
+	memcpy(&level, (char *)page + offset, 4);
+	assert(level >= 1);		// level should be equal or greater than 1 when this function is called
+	offset += 4;
+
+	cout << "InitTree - Reading the root [at page " << rootPageNum << "] for a tree of level " << level << "." << endl;
+
+	NodeType rootNodeType = level == 1 ? LEAF_NODE : NON_LEAF_NODE;
+	BTreeNode<KEY> *root = ReadNode<KEY>(rootPageNum, rootNodeType);
+	tree = new BTree<KEY>(root, DEFAULT_ORDER, level, this, &IX_IndexHandle::ReadNode<KEY>);
+
+	// each bit in the occupancy variable represents the availability of corresponding page
+	memcpy(&this->_occupancy, (char *)page + offset, 4);
+	offset += 4;
+
+	free(page);
+	return SUCCESS;
 }
 
 RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)  // Insert new index entry
 {
-
+	if (strcmp(this->_key_type.c_str(), typeid(int).name()) == 0)
+	{
+		const int intKey = *(int *)key;
+		if (this->_int_index == NULL)
+			InitTree(this->_int_index, intKey, rid);
+		else
+			this->_int_index->InsertEntry(intKey, rid);
+	}
+	else if (strcmp(this->_key_type.c_str(), typeid(float).name()) == 0)
+	{
+		const float floatKey = *(float *)key;
+		if (this->_float_index == NULL)
+			InitTree(this->_float_index, floatKey, rid);
+		else
+			this->_float_index->InsertEntry(floatKey, rid);
+	}
 	return SUCCESS;
 }
+
+//BTreeNode<int>* IX_IndexHandle::ReadIntNode(const unsigned pageNum, const NodeType type)
+//{
+//	return ReadNode<int>(pageNum, type);
+//}
+//
+//BTreeNode<float>* IX_IndexHandle::ReadFloatNode(const unsigned pageNum, const NodeType type)
+//{
+//	return ReadNode<float>(pageNum, type);
+//}
 
 RC IX_IndexHandle::Open(PF_FileHandle *handle, string keyType)
 {
@@ -357,6 +525,7 @@ RC IX_IndexHandle::Open(PF_FileHandle *handle, string keyType)
 
 	this->_pf_handle = handle;
 	this->_key_type = keyType;
+
 	return SUCCESS;
 }
 
@@ -369,23 +538,14 @@ RC IX_IndexHandle::Close()
 	}
 
 	this->_pf_handle = NULL;
+	delete this->_int_index;
+	delete this->_float_index;
 	return SUCCESS;
 }
 
 PF_FileHandle* IX_IndexHandle::GetFileHandle()
 {
 	return this->_pf_handle;
-}
-
-template <typename KEY>
-RC IX_IndexHandle::ReadNode(BTreeNode<KEY> *node, const unsigned pageNum, const NodeType type)
-{
-	if (strcmp(this->_key_type.c_str(), typeid(int).name()) == 0)
-	{
-		node = new BTreeNode<int>;
-	}
-
-	return SUCCESS;
 }
 
 /********************* IX_IndexHandle End *********************/

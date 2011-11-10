@@ -35,7 +35,7 @@ using namespace std;
 // Return code
 typedef int RC;
 
-
+// TODO: define toString() function
 // Record ID
 typedef struct
 {
