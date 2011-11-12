@@ -3,3 +3,5 @@ Debug/*
 *.a
 *.o
 *test
+t
+b

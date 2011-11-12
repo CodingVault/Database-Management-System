@@ -16,7 +16,6 @@ int main()
   cout << "test..." << endl;
 
   ixTest();
-  // other tests go here
 
   cout << "OK" << endl;
 }

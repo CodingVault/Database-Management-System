@@ -10,14 +10,14 @@ PF_Manager* IX_Manager::_pf_manager = 0;
 
 /**************************************/
 
-bool exist(const string fileName)
+bool Exist(const string fileName)
 {
 	// TODO: Implementation!
 	return true;
 }
 
 template <typename KEY>
-unsigned binarySearch(const vector<KEY> keys, const KEY key)
+unsigned BinarySearch(const vector<KEY> keys, const KEY key)
 {
 	// TODO: Implementation!
 	return -1;
@@ -28,7 +28,7 @@ unsigned binarySearch(const vector<KEY> keys, const KEY key)
  * Writes node data to file, and update page number for the node.
  */
 template <typename KEY>
-void writeNode(PF_FileHandle &handle, const BTreeNode<KEY> *node)
+void WriteNode(PF_FileHandle &handle, const BTreeNode<KEY> *node)
 {
 	// TODO: update current node pageNum and parent's childrenPageNum
 
@@ -40,7 +40,7 @@ void writeNode(PF_FileHandle &handle, const BTreeNode<KEY> *node)
 		{
 			if (node->childrenPageNums[index] == -1)
 			{
-				writeNode(handle, node->children[index]);
+				WriteNode(handle, node->children[index]);
 			}
 		}
 	}
@@ -50,6 +50,12 @@ void writeNode(PF_FileHandle &handle, const BTreeNode<KEY> *node)
 	}
 
 	return 0;
+}
+
+template <typename KEY>
+void PrintNode(const BTreeNode<KEY> *node, const NodeType nodeType)
+{
+
 }
 
 /**************************************/
@@ -71,7 +77,7 @@ BTree<KEY>::BTree(const unsigned order, IX_IndexHandle *ixHandle,
 		BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType))
 		: _order(order), _level(1), _func_ReadNode(ixHandle, func)
 {
-	InitRootNode(LEAF_NODE);
+	InitRootNode(NodeType(1));
 }
 
 template <typename KEY>
@@ -90,7 +96,7 @@ BTree<KEY>::~BTree()
 /* ================== Helper Functions Begin ================== */
 
 template <typename KEY>
-void split(const unsigned order, BTreeNode<KEY> *splitee, BTreeNode<KEY> *newNode)
+void Split(const unsigned order, BTreeNode<KEY> *splitee, BTreeNode<KEY> *newNode)
 {
 	// construct new node -- the right one
 	newNode->parent = splitee->parent;
@@ -110,7 +116,7 @@ void split(const unsigned order, BTreeNode<KEY> *splitee, BTreeNode<KEY> *newNod
 /* ================== Private Functions Begin ================== */
 
 template <typename KEY>
-void BTree<KEY>::InitRootNode(NodeType nodeType)
+void BTree<KEY>::InitRootNode(const NodeType nodeType)
 {
 	this->_root = new BTreeNode<KEY>;
 	this->_root->type = nodeType;
@@ -130,12 +136,12 @@ void BTree<KEY>::InitRootNode(NodeType nodeType)
 /**
  * Looks for the leaf node in which the given key should exist.
  *
- * @return pos is the position of the given key in leaf node, or position for insertion if not found.
+ * @param pos is the position of the given key in leaf node, or position for insertion if not found.
  */
 template <typename KEY>
 RC BTree<KEY>::SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos)
 {
-	if (node->type == LEAF_NODE)		// reach leaf node
+	if (node->type == NodeType(1))		// reach leaf node
 	{
 		leafNode = node;
 		for (unsigned index = 0; index < node->keys.size(); index++)
@@ -163,8 +169,11 @@ RC BTree<KEY>::SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned de
 			{
 				if (node->children[index] == NULL)
 				{
-					NodeType nodeType = depth > 2 ? NON_LEAF_NODE : LEAF_NODE;
+					NodeType nodeType = depth > 2 ? NodeType(0) : NodeType(1);
 					node->children[index] = this->_func_ReadNode(node->childrenPageNums[index], nodeType);
+					BTreeNode<KEY> *parent = node;
+					node->children[index]->parent = parent;	// NOTE: remember node->children[index] is a pointer; use "->" to refer to its fields
+					node->children[index]->pos = index;
 				}
 				SearchNode(node->children[index], key, depth - 1, leafNode, pos);
 			}
@@ -193,13 +202,13 @@ RC BTree<KEY>::Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, c
 	if (leafNode->keys.size() > this->_order * 2)	// need to split
 	{
 		BTreeNode<KEY> *newNode = new BTreeNode<KEY>;
-		split(this->_order, leafNode, newNode);
+		Split(this->_order, leafNode, newNode);
 
 		// update old node -- the left one
 		leafNode->rids.resize(this->_order);
 
 		// update new node -- the right one
-		newNode->type = LEAF_NODE;
+		newNode->type = NodeType(1);
 		newNode->rids = vector<RID>(leafNode->rids.begin() + this->_order, leafNode->rids.end());
 
 		// update parent
@@ -220,7 +229,7 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 
 	if (parent == NULL)		// reach root
 	{
-		InitRootNode(NON_LEAF_NODE);
+		InitRootNode(NodeType(0));
 		this->_root->keys.push_back(key);
 		this->_root->children.push_back(rightNode->left);
 		this->_root->childrenPageNums.push_back(rightNode->left->pageNum);
@@ -241,14 +250,14 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 	if (parent->keys.size() > this->_order * 2)	// need to split
 	{
 		BTreeNode<KEY> *newNode = new BTreeNode<KEY>;
-		split(this->_order, parent, newNode);
+		Split(this->_order, parent, newNode);
 
 		// update old node -- the left one
 		parent->children.resize(this->_order + 1);
 		parent->childrenPageNums.resize(this->_order + 1);
 
 		// update new node -- the right one
-		newNode->type = NON_LEAF_NODE;
+		newNode->type = NodeType(0);
 		newNode->children.insert(newNode->children.begin(), parent->children.begin() + this->_order + 1, parent->children.end());
 		newNode->childrenPageNums.insert(newNode->childrenPageNums.begin(),
 				parent->childrenPageNums.begin() + this->_order + 1,
@@ -291,6 +300,7 @@ RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 	return SUCCESS;
 }
 
+// TODO: Implementation!!!
 template <typename KEY>
 RC BTree<KEY>::DeleteTree()
 {
@@ -319,7 +329,7 @@ RC IX_Manager::CreateIndex(const string tableName,       // create new index
 		 const string attributeName)
 {
 	const string fileName = IX_FILE_NAME(tableName, attributeName);
-	if (!exist(fileName))
+	if (!Exist(fileName))
 	{
 		IX_PrintError(INVALID_OPERATION);
 		return INVALID_OPERATION;
@@ -355,7 +365,34 @@ RC IX_Manager::OpenIndex(const string tableName,         // open an index
 		IX_PrintError(FILE_OP_ERROR);
 		return FILE_OP_ERROR;
 	}
-	string keyType;		// TODO: get key type
+
+	RM *rm = RM::Instance();
+    RM_ScanIterator rmsi;
+    string attr = "TYPE";
+    vector<string> attributes;
+    attributes.push_back(attr);
+    rm->scan(tableName, "COLUMN_NAME", CompOp(6), "", attributes, rmsi);
+
+    RID rid;
+    void *data_returned = malloc(100);
+	char *keyType;
+    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
+    {
+    	unsigned len = 0;
+    	memcpy(&len, data_returned, 4);
+    	keyType = (char *)malloc(len);
+    	memcpy(keyType, (char *)data_returned + 4, len);
+    	cout << "IX_Manager::OpenIndex - Opening index for ";
+    	cout << tableName << "." << attributeName << " [" << keyType << "]" << "." << endl;
+    }
+    if (keyType == NULL)
+    {
+    	IX_PrintError(ATTRIBUTE_NOT_FOUND);
+    	return ATTRIBUTE_NOT_FOUND;
+    }
+    free(data_returned);
+    rmsi.close();
+
 	indexHandle.Open(&handle, keyType);
 	return SUCCESS;
 }
@@ -372,6 +409,11 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle)  // close index
 	return SUCCESS;
 }
 
+/* ================== Protected Functions Begin ================== */
+
+/**
+ * Initializes meta-data of new index file.
+ */
 RC IX_Manager::InitMetadata(string fileName)
 {
 	PF_FileHandle handle;
@@ -399,6 +441,8 @@ RC IX_Manager::InitMetadata(string fileName)
 	return SUCCESS;
 }
 
+/* ================== Protected Functions End ================== */
+
 /********************* IX_Manager End *********************/
 
 /********************* IX_IndexHandle Begin *********************/
@@ -406,7 +450,7 @@ RC IX_Manager::InitMetadata(string fileName)
 IX_IndexHandle::IX_IndexHandle()
 {
 	this->_pf_handle = NULL;
-	this->_key_type = "";
+	this->_key_type = NULL;
 	this->_free_page_num = 0;
 	this->_int_index = NULL;
 	this->_float_index = NULL;
@@ -414,22 +458,83 @@ IX_IndexHandle::IX_IndexHandle()
 
 IX_IndexHandle::~IX_IndexHandle()
 {
-	if (this->_int_index != NULL)
+	if (this->_key_type)
+		free(this->_key_type);
+	if (this->_int_index)
 		delete this->_int_index;
-	if (this->_float_index != NULL)
+	if (this->_float_index)
 		delete this->_float_index;
 }
 
-/* ================== Public Functions Begin ================== */
+/* ================== Protected Functions Begin ================== */
 
+// TODO: can be separated from IX_IndexHandle class -- can also simplify Functor
 template <typename KEY>
-BTreeNode<KEY>* IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType type)
+BTreeNode<KEY>* IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType nodeType)
 {
-	void *page = malloc(PF_PAGE_SIZE);
-//	this->_pf_handle->ReadPage(pageNum, page);
-	BTreeNode<KEY> *node;
+	const unsigned KEY_LENGTH = 4;
+	const unsigned RID_LENGTH = 8;
+	const unsigned PAGE_NUM_LENGTH = 4;
 
-//	if (type == LEAF_NODE)
+	void *page = malloc(PF_PAGE_SIZE);
+	this->_pf_handle->ReadPage(pageNum, page);
+	unsigned offset = 0;
+
+	unsigned nodeNum = 0;
+	memcpy(&nodeNum, page, 4);
+	offset += 4;
+	cout << "IX_IndexHandle::ReadNode - Reading " << nodeNum << " key(s) from page " << pageNum << " as type " << nodeType << "." << endl;
+
+	BTreeNode<KEY> *node = new BTreeNode<KEY>;
+	node->pageNum = pageNum;
+	node->type = nodeType;
+	node->parent = NULL;
+	node->left = NULL;
+	node->right = NULL;
+	node->pos = 0;
+	if (nodeType == NodeType(1))	// read leaf node
+	{
+		// read double direction links
+		memcpy(&node->leftPageNum, (char *)page + offset, 4);
+		offset += 4;
+		memcpy(&node->rightPageNum, (char *)page + offset, 4);
+		offset += 4;
+
+		// read key and rid pairs
+		for (unsigned index = 0; index < nodeNum; index++)
+		{
+			KEY key;
+			RID rid;
+			memcpy(&key, (char *)page + offset, KEY_LENGTH);
+			offset += KEY_LENGTH;
+			memcpy(&rid, (char *)page + offset, RID_LENGTH);
+			offset += RID_LENGTH;
+
+			node->keys.push_back(key);
+			node->rids.push_back(rid);
+		}
+	}
+	else	// read non-leaf node
+	{
+		// read leftmost child page number
+		unsigned childPageNum = 0;
+		memcpy(&childPageNum, (char *)page + offset, PAGE_NUM_LENGTH);
+		offset += PAGE_NUM_LENGTH;
+		node->childrenPageNums.push_back(childPageNum);
+
+		// read keys and other children page numbers
+		for (unsigned index = 0; index < nodeNum; index++)
+		{
+			KEY key;
+			memcpy(&key, (char *)page + offset, KEY_LENGTH);
+			offset += KEY_LENGTH;
+			memcpy(&childPageNum, (char *)page + offset, PAGE_NUM_LENGTH);
+			offset += PAGE_NUM_LENGTH;
+
+			node->keys.push_back(key);
+			node->childrenPageNums.push_back(childPageNum);
+		}
+	}
 
 	free(page);
 	return node;
@@ -438,6 +543,7 @@ BTreeNode<KEY>* IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType 
 template <typename KEY>
 RC IX_IndexHandle::InitTree(BTree<KEY> *tree)
 {
+	// read meta-data
 	void *page = malloc(PF_PAGE_SIZE);
 	this->_pf_handle->ReadPage(0, page);
 	unsigned offset = 0;
@@ -452,14 +558,15 @@ RC IX_IndexHandle::InitTree(BTree<KEY> *tree)
 	memcpy(&freePageNum, (char *)page + offset, 4);
 	free(page);
 
-	if (level > 0)
+	// initialize tree
+	if (level > 0)	// read root from file
 	{
 		cout << "InitTree - Reading the root [at page " << rootPageNum << "] for a tree of level " << level << "." << endl;
-		NodeType rootNodeType = level == 1 ? LEAF_NODE : NON_LEAF_NODE;
+		NodeType rootNodeType = level == 1 ? NodeType(1) : NodeType(0);
 		BTreeNode<KEY> *root = ReadNode<KEY>(rootPageNum, rootNodeType);
 		tree = new BTree<KEY>(DEFAULT_ORDER, root, level, this, &IX_IndexHandle::ReadNode<KEY>);
 	}
-	else
+	else	// create an empty tree
 	{
 		cout << "InitTree - Initializing a tree with empty root as a leaf node." << endl;
 		tree = new BTree<KEY>(DEFAULT_ORDER, this, &IX_IndexHandle::ReadNode<KEY>);
@@ -478,15 +585,19 @@ RC IX_IndexHandle::InsertEntry(BTree<KEY> *tree, const KEY key, const RID &rid)
 	return tree->InsertEntry(key, rid);
 }
 
-RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)  // Insert new index entry
+/* ================== Protected Functions End ================== */
+
+/* ================== Public Functions Begin ================== */
+
+RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 {
 	RC rc;
-	if (strcmp(this->_key_type.c_str(), typeid(int).name()) == 0)
+	if (strcmp(this->_key_type, typeid(int).name()) == 0)
 	{
 		const int intKey = *(int *)key;
 		rc = InsertEntry(this->_int_index, intKey, rid);
 	}
-	else if (strcmp(this->_key_type.c_str(), typeid(float).name()) == 0)
+	else if (strcmp(this->_key_type, typeid(float).name()) == 0)
 	{
 		const float floatKey = *(float *)key;
 		rc = InsertEntry(this->_float_index, floatKey, rid);
@@ -494,9 +605,7 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)  // Insert new index e
 	return rc;
 }
 
-/* ================== Public Functions End ================== */
-
-RC IX_IndexHandle::Open(PF_FileHandle *handle, string keyType)
+RC IX_IndexHandle::Open(PF_FileHandle *handle, char *keyType)
 {
 	if (this->_pf_handle != NULL)
 	{
@@ -529,6 +638,8 @@ PF_FileHandle* IX_IndexHandle::GetFileHandle()
 	return this->_pf_handle;
 }
 
+/* ================== Public Functions End ================== */
+
 /********************* IX_IndexHandle End *********************/
 
 /********************* IX_IndexScan Start *********************/
@@ -539,12 +650,15 @@ PF_FileHandle* IX_IndexHandle::GetFileHandle()
 
 void IX_PrintError(RC rc)
 {
-	string errMsg = "";
+	string errMsg = "!!! IX_PrintError - ";
 
-//	switch (rc)
-//	{
-//
-//	}
+	switch (rc)
+	{
+	case ATTRIBUTE_NOT_FOUND:
+		errMsg += "Cannot find the given attribute in the given table.";
+		cerr << errMsg << endl;
+		break;
+	}
 
 	cout << "Encountered error: " << errMsg << endl;
 }

@@ -20,6 +20,8 @@ typedef enum {
 	INVALID_OPERATION = -1,
 	FILE_OP_ERROR = -2,
 	FILE_NOT_FOUND = -3,
+
+	ATTRIBUTE_NOT_FOUND = -4,
 } ReturnCode;
 
 class IX_IndexHandle;
@@ -87,7 +89,7 @@ protected:
 	RC Insert(BTreeNode<KEY> *rightNode);
 
 private:
-	void InitRootNode(NodeType nodeType);
+	void InitRootNode(const NodeType nodeType);
 
 private:
 	BTreeNode<KEY>* _root;
@@ -114,12 +116,12 @@ class IX_Manager {
  protected:
   IX_Manager   ();                             // Constructor
   ~IX_Manager  ();                             // Destructor
+
+  RC InitMetadata(const string fileName);
  
  private:
   static IX_Manager *_ix_manager;
   static PF_Manager *_pf_manager;
-
-  RC InitMetadata(const string fileName);
 };
 
 
@@ -135,7 +137,7 @@ class IX_IndexHandle {
   RC InsertEntry(void *key, const RID &rid);  // Insert new index entry
   RC DeleteEntry(void *key, const RID &rid);  // Delete index entry
 
-  RC Open(PF_FileHandle *handle, string keyType);
+  RC Open(PF_FileHandle *handle, char *keyType);
   RC Close();
   PF_FileHandle* GetFileHandle();
 
@@ -145,11 +147,11 @@ class IX_IndexHandle {
   template <typename KEY>
   RC InsertEntry(BTree<KEY> *tree, const KEY key, const RID &rid);
   template <typename KEY>
-  BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType type);
+  BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
 
  private:
   PF_FileHandle *_pf_handle;
-  string _key_type;
+  char *_key_type;
   unsigned _free_page_num;
 
   BTree<int> *_int_index;
