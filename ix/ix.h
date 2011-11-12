@@ -53,10 +53,6 @@ struct BTreeNode {
 	vector<int> childrenPageNums;
 };
 
-// Read given page number as given node type to the BTreeNode
-typedef BTreeNode<int>* (*ReadIntNode)(const unsigned, const NodeType);
-typedef BTreeNode<float>* (*ReadFloatNode)(const unsigned, const NodeType);
-
 template <typename Class, typename KEY>
 class Functor	// TODO: use static function?
 {
@@ -82,11 +78,20 @@ public:
 	RC DeleteEntry(const KEY key);
 	RC DeleteTree();
 
+	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
+	vector<BTreeNode<KEY>*> GetDeletedNodes() const;
+
 protected:
 	BTree();
 	RC SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos);
 	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
 	RC Insert(BTreeNode<KEY> *rightNode);
+
+	RC deleteNode(BTreeNode<KEY>* Node,int nodeLevel, const KEY key, unsigned& oldchildPos);
+	RC redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+	RC redistribute_LeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+	RC merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
+	RC merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
 
 private:
 	void InitRootNode(const NodeType nodeType);
@@ -96,6 +101,9 @@ private:
 	unsigned _order;
 	unsigned _level;
 	Functor<IX_IndexHandle, KEY> _func_ReadNode;
+
+	vector<BTreeNode<KEY>*> _updated_nodes;
+	vector<BTreeNode<KEY>*> _deleted_nodes;
 };
 
 /******************** Tree Structure ********************/
@@ -139,7 +147,7 @@ class IX_IndexHandle {
 
   RC Open(PF_FileHandle *handle, char *keyType);
   RC Close();
-  PF_FileHandle* GetFileHandle();
+  PF_FileHandle* GetFileHandle() const;
 
  protected:
   template <typename KEY>
@@ -148,6 +156,8 @@ class IX_IndexHandle {
   RC InsertEntry(BTree<KEY> *tree, const KEY key, const RID &rid);
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
+  template <typename KEY>
+  void WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
 
  private:
   PF_FileHandle *_pf_handle;
