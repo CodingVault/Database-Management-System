@@ -698,8 +698,7 @@ RC IX_Manager::OpenIndex(const string tableName,         // open an index
 //    rmsi.close();
 	char keyType[] = "int";
 
-	indexHandle.Open(&handle, keyType);
-	return SUCCESS;
+	return indexHandle.Open(&handle, keyType);
 }
 
 RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle)  // close index
@@ -1042,13 +1041,15 @@ PF_FileHandle* IX_IndexHandle::GetFileHandle() const
 
 void IX_PrintError(RC rc)
 {
-	string errMsg = "!!! IX_PrintError - ";
+	string errMsg;
 
 	switch (rc)
 	{
+	case INVALID_OPERATION:
+		errMsg = "Invalid operation.";
+		break;
 	case ATTRIBUTE_NOT_FOUND:
-		errMsg += "Cannot find the given attribute in the given table.";
-		cerr << errMsg << endl;
+		errMsg = "Cannot find the given attribute in the given table.";
 		break;
 	}
 

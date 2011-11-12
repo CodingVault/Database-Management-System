@@ -16,11 +16,21 @@ void ixTest()
 
 	IX_Manager *ix_manager = IX_Manager::Instance();
 	IX_IndexHandle ix_handle;
-	ix_manager->CreateIndex("Emp", "eno");
-	ix_manager->OpenIndex("Emp", "eno", ix_handle);
-	ix_handle.InsertEntry(&key, rid);
-	ix_manager->CloseIndex(ix_handle);
-	ix_manager->DestroyIndex("Emp", "eno");
+	RC rc = ix_manager->CreateIndex("Emp", "eno");
+	assert(rc == SUCCESS);
+	cout << "==== Create index done!" << endl << endl;
+	rc = ix_manager->OpenIndex("Emp", "eno", ix_handle);
+	assert(rc == SUCCESS);
+	cout << "==== Open index done!" << endl << endl;
+	rc = ix_handle.InsertEntry(&key, rid);
+	assert(rc == SUCCESS);
+	cout << "==== Insert entry done!" << endl << endl;
+	rc = ix_manager->CloseIndex(ix_handle);
+	assert(rc == SUCCESS);
+	cout << "==== Close index done!" << endl << endl;
+	rc = ix_manager->DestroyIndex("Emp", "eno");
+	assert(rc == SUCCESS);
+	cout << "==== Destroy index done!" << endl << endl;
 }
 
 int main() 
