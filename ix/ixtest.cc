@@ -35,11 +35,13 @@ void ixTest()
 	rc = insertEntry(ix_handle, 6, pageNum, slotNum++);
 	rc = insertEntry(ix_handle, 3, pageNum, slotNum++);
 	rc = insertEntry(ix_handle, 4, pageNum, slotNum++);
-//	for (unsigned index = 0; index < 100; index++)
-//	{
-//		unsigned key = (index * 1000000 - 123245) % 34231;
-//		rc = insertEntry(ix_handle, key, (pageNum + index * 8) % 10, (slotNum * index + 10) % 20);
-//	}
+	rc = insertEntry(ix_handle, 8, pageNum, slotNum++);
+	rc = insertEntry(ix_handle, 9, pageNum, slotNum++);
+	for (unsigned index = 0; index < 1000; index++)
+	{
+		unsigned key = (index * 1000000 - 123245) % 341231;
+		rc = insertEntry(ix_handle, key, (pageNum + index * 8) % 10, (slotNum * index + 10) % 20);
+	}
 	assert(rc == SUCCESS);
 	cout << "==== Insert entry done!" << endl << endl;
 	rc = ix_manager->CloseIndex(ix_handle);

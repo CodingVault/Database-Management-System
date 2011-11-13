@@ -28,7 +28,7 @@ class IX_IndexHandle;
 
 /******************** Tree Structure ********************/
 
-#define DEFAULT_ORDER 1
+#define DEFAULT_ORDER 10
 
 typedef enum {
 	NON_LEAF_NODE = 0,
@@ -81,12 +81,13 @@ public:
 	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
 	vector<BTreeNode<KEY>*> GetDeletedNodes() const;
 	void ClearPendingNodes();
+	BTreeNode<KEY>* GetRoot() const;
 
 protected:
 	BTree();
 	RC SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned height, BTreeNode<KEY> **leafNode, unsigned &pos);
 	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
-	RC Insert(const KEY key, BTreeNode<KEY> *rightNode);
+	RC Insert(BTreeNode<KEY> *rightNode);
 
 	RC deleteNode(BTreeNode<KEY>* Node,int nodeLevel, const KEY key, unsigned& oldchildPos);
 	RC redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
