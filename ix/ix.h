@@ -28,7 +28,7 @@ class IX_IndexHandle;
 
 /******************** Tree Structure ********************/
 
-#define DEFAULT_ORDER 10
+#define DEFAULT_ORDER 1
 
 typedef enum {
 	NON_LEAF_NODE = 0,
@@ -73,19 +73,20 @@ public:
 			BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType));	// initialize a tree with given root node
 	~BTree();
 
-	RC SearchEntry(const KEY key, BTreeNode<KEY> *leafNode, unsigned &pos);
+	RC SearchEntry(const KEY key, BTreeNode<KEY> **leafNode, unsigned &pos);
 	RC InsertEntry(const KEY key, const RID &rid);
 	RC DeleteEntry(const KEY key);
 	RC DeleteTree();
 
 	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
 	vector<BTreeNode<KEY>*> GetDeletedNodes() const;
+	void ClearPendingNodes();
 
 protected:
 	BTree();
-	RC SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned depth, BTreeNode<KEY> *leafNode, unsigned &pos);
+	RC SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned height, BTreeNode<KEY> **leafNode, unsigned &pos);
 	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
-	RC Insert(BTreeNode<KEY> *rightNode);
+	RC Insert(const KEY key, BTreeNode<KEY> *rightNode);
 
 	RC deleteNode(BTreeNode<KEY>* Node,int nodeLevel, const KEY key, unsigned& oldchildPos);
 	RC redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
@@ -99,7 +100,7 @@ private:
 private:
 	BTreeNode<KEY>* _root;
 	unsigned _order;
-	unsigned _level;
+	unsigned _height;
 	Functor<IX_IndexHandle, KEY> _func_ReadNode;
 
 	vector<BTreeNode<KEY>*> _updated_nodes;
@@ -151,9 +152,9 @@ class IX_IndexHandle {
 
  protected:
   template <typename KEY>
-  RC InitTree(BTree<KEY> *tree);
+  RC InitTree(BTree<KEY> **tree);
   template <typename KEY>
-  RC InsertEntry(BTree<KEY> *tree, const KEY key, const RID &rid);
+  RC InsertEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
   template <typename KEY>
