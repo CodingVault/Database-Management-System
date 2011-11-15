@@ -634,7 +634,7 @@ RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 	{
 		cout << endl << endl << endl;
 		cout << "***************************************************************************" << endl;
-		cout << "====== BTree<KEY>::InsertEntry - Found position [" << pos << "] on leaf node [" << leafNode->pageNum << "]." << endl;
+		cout << "BTree<KEY>::InsertEntry - Found position [" << pos << "] on leaf node [" << leafNode->pageNum << "]." << endl;
 		if (leafNode->parent && leafNode->parent->parent)
 		{
 			cout << "Parent's parent:" << endl;
@@ -1123,7 +1123,11 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 		rc = InsertEntry(&this->_int_index, intKey, rid);
 		this->WriteNodes(this->_int_index->GetUpdatedNodes());
 		this->_int_index->ClearPendingNodes();
-		PrintTree(this->_int_index);
+		if (DEBUG)
+		{
+			cout << "IX_IndexHandle::InsertEntry - Print int tree:" << endl;
+			PrintTree(this->_int_index);
+		}
 	}
 	else if (strcmp(this->_key_type, typeid(float).name()) == 0)
 	{
@@ -1131,6 +1135,11 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 		rc = InsertEntry(&this->_float_index, floatKey, rid);
 		this->WriteNodes(this->_float_index->GetUpdatedNodes());
 		this->_int_index->ClearPendingNodes();
+		if (DEBUG)
+		{
+			cout << "IX_IndexHandle::InsertEntry - Print float tree:" << endl;
+			PrintTree(this->_int_index);
+		}
 	}
 	return rc;
 }
