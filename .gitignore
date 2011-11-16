@@ -1,8 +1,9 @@
 .DS_Store
-Debug/*
+Debug
+t
+b
 *.a
 *.o
 *test
-t
-b
+*.bak
 *.idx

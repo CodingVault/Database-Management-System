@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+//#include <typeinfo>
 
 #include "../pf/pf.h"
 #include "../rm/rm.h"
@@ -28,7 +29,7 @@ class IX_IndexHandle;
 
 /******************** Tree Structure ********************/
 
-#define DEFAULT_ORDER 10
+#define DEFAULT_ORDER 2
 
 typedef enum {
 	NON_LEAF_NODE = 0,
@@ -69,19 +70,20 @@ template <typename KEY>
 class BTree {
 public:
 	BTree(const unsigned order, IX_IndexHandle *ixHandle, BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType));	// grow a tree from the beginning
-	BTree(const unsigned order, BTreeNode<KEY> *root, const unsigned level, IX_IndexHandle *ixHandle,
+	BTree(const unsigned order, BTreeNode<KEY> *root, const unsigned height, IX_IndexHandle *ixHandle,
 			BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType));	// initialize a tree with given root node
 	~BTree();
 
 	RC SearchEntry(const KEY key, BTreeNode<KEY> **leafNode, unsigned &pos);
 	RC InsertEntry(const KEY key, const RID &rid);
-	RC DeleteEntry(const KEY key);
-	RC DeleteTree();
+	RC DeleteEntry(const KEY key,const RID &rid);
+	RC DeleteTree(BTreeNode<KEY> *Node);
 
 	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
 	vector<BTreeNode<KEY>*> GetDeletedNodes() const;
 	void ClearPendingNodes();
 	BTreeNode<KEY>* GetRoot() const;
+	unsigned GetHeight() const;
 
 protected:
 	BTree();
@@ -89,11 +91,14 @@ protected:
 	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
 	RC Insert(BTreeNode<KEY> *rightNode);
 
-	RC deleteNode(BTreeNode<KEY>* Node,int nodeLevel, const KEY key, unsigned& oldchildPos);
-	RC redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
-	RC redistribute_LeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
-	RC merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
-	RC merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
+	RC delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KEY key, const RID &rid,int& oldchildPos);
+	RC delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos);
+
+	void redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+	void redistribute_LeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+
+    void merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
+	void merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
 
 private:
 	void InitRootNode(const NodeType nodeType);
@@ -126,8 +131,6 @@ class IX_Manager {
  protected:
   IX_Manager   ();                             // Constructor
   ~IX_Manager  ();                             // Destructor
-
-  RC InitMetadata(const string fileName);
  
  private:
   static IX_Manager *_ix_manager;
@@ -147,9 +150,10 @@ class IX_IndexHandle {
   RC InsertEntry(void *key, const RID &rid);  // Insert new index entry
   RC DeleteEntry(void *key, const RID &rid);  // Delete index entry
 
-  RC Open(PF_FileHandle *handle, char *keyType);
+  RC Open(PF_FileHandle *handle, AttrType keyType);
   RC Close();
   PF_FileHandle* GetFileHandle() const;
+  AttrType GetKeyType() const;
 
  protected:
   template <typename KEY>
@@ -159,16 +163,19 @@ class IX_IndexHandle {
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
   template <typename KEY>
-  void WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
+  RC WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
+  template <typename KEY>
+  RC UpdateMetadata(const BTree<KEY> *tree);
 
  private:
   PF_FileHandle *_pf_handle;
-  char *_key_type;
+  AttrType _key_type;
   unsigned _free_page_num;
 
   BTree<int> *_int_index;
   BTree<float> *_float_index;
 };
+
 
 
 class IX_IndexScan {
@@ -183,6 +190,22 @@ class IX_IndexScan {
 
   RC GetNextEntry(RID &rid);  // Get next matching entry
   RC CloseScan();             // Terminate index scan
+ protected:
+  template <typename KEY>
+  RC get_next_entry(RID &rid);
+  template <typename KEY>
+  RC OpenScan(const IX_IndexHandle &indexHandle,
+  	      CompOp      compOp,
+  	      void        *value);
+
+ private:
+  BTreeNode<int> *intNode;
+  BTreeNode<float> *floatNode;
+  char keyValue[PF_PAGE_SIZE];
+  int currentIndex;
+  CompOp compOp;
+  AttrType type;
+  IX_IndexHandle indexHandle;
 };
 
 // print out the error message for a given return code
