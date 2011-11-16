@@ -1326,35 +1326,19 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 template <typename KEY>
 RC IX_IndexHandle::InitTree(BTree<KEY> **tree)
 {
-	// read meta-data
-	void *page = malloc(PF_PAGE_SIZE);
-	this->_pf_handle->ReadPage(0, page);
-	unsigned offset = 0;
-
-	unsigned rootPageNum = 0;
-	memcpy(&rootPageNum, (char *)page + offset, 4);
-	offset += 4;
-	unsigned height = 0;
-	memcpy(&height, (char *)page + offset, 4);
-	offset += 4;
-	unsigned freePageNum = 0;
-	memcpy(&freePageNum, (char *)page + offset, 4);
-	free(page);
-
 	// initialize tree
-	if (height > 0)	// read root from file
+	if (this->_height > 0)	// read root from file
 	{
-		cout << "IX_IndexHandle::InitTree - Reading the root [at page " << rootPageNum << "] for a tree of height " << height << "." << endl;
-		NodeType rootNodeType = height == 1 ? NodeType(1) : NodeType(0);
-		BTreeNode<KEY> *root = ReadNode<KEY>(rootPageNum, rootNodeType);
-		*tree = new BTree<KEY>(DEFAULT_ORDER, root, height, this, &IX_IndexHandle::ReadNode<KEY>);
+		cout << "IX_IndexHandle::InitTree - Reading the root [at page " << this->_root_page_num << "] for a tree of height " << this->_height << "." << endl;
+		NodeType rootNodeType = this->_height == 1 ? NodeType(1) : NodeType(0);
+		BTreeNode<KEY> *root = ReadNode<KEY>(this->_root_page_num, rootNodeType);
+		*tree = new BTree<KEY>(DEFAULT_ORDER, root, this->_height, this, &IX_IndexHandle::ReadNode<KEY>);
 	}
 	else	// create an empty tree
 	{
 		cout << "IX_IndexHandle::InitTree - Initializing a tree with empty root as a leaf node." << endl;
 		*tree = new BTree<KEY>(DEFAULT_ORDER, this, &IX_IndexHandle::ReadNode<KEY>);
 	}
-	this->_free_page_num = freePageNum;
 
 	return SUCCESS;
 }
@@ -1366,6 +1350,30 @@ RC IX_IndexHandle::InsertEntry(BTree<KEY> **tree, const KEY key, const RID &rid)
 		this->InitTree(tree);
 
 	return (*tree)->InsertEntry(key, rid);
+}
+
+RC IX_IndexHandle::LoadMetadata()
+{
+	RC rc = SUCCESS;
+
+	// read meta-data
+	void *page = malloc(PF_PAGE_SIZE);
+	rc = this->_pf_handle->ReadPage(0, page);
+	if (rc != SUCCESS)
+	{
+		cerr << "ERROR!" << endl; // TODO: change it!
+		return rc;
+	}
+	unsigned offset = 0;
+
+	memcpy(&this->_root_page_num, (char *)page + offset, 4);
+	offset += 4;
+	memcpy(&this->_height, (char *)page + offset, 4);
+	offset += 4;
+	memcpy(&this->_free_page_num, (char *)page + offset, 4);
+	free(page);
+
+	return rc;
 }
 
 template <typename KEY>
@@ -1407,7 +1415,12 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 		const float floatKey = *(float *)key;
 		rc = InsertEntry(&this->_float_index, floatKey, rid);
 		this->WriteNodes(this->_float_index->GetUpdatedNodes());
-		this->_int_index->ClearPendingNodes();
+		this->_float_index->ClearPendingNodes();
+		if (DEBUG)
+		{
+			cout << "IX_IndexHandle::InsertEntry - Print float tree:" << endl;
+			PrintTree(this->_float_index);
+		}
 	}
 	return rc;
 }
@@ -1443,6 +1456,7 @@ RC IX_IndexHandle::Open(PF_FileHandle *handle, AttrType keyType)
 
 	this->_pf_handle = handle;
 	this->_key_type = keyType;
+	this->LoadMetadata();
 
 	return SUCCESS;
 }
