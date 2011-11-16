@@ -1373,8 +1373,9 @@ RC IX_IndexHandle::UpdateMetadata(const BTree<KEY> *tree)
 {
 	void *page = malloc(PF_PAGE_SIZE);
 
+	unsigned height = tree->GetHeight();
 	memcpy(page, &tree->GetRoot()->pageNum, 4);
-	memcpy((char *)page + 4, &tree->_height, 4);
+	memcpy((char *)page + 4, &height, 4);
 	memcpy((char *)page + 4, &this->_free_page_num, 4);
 
 	RC rc = this->_pf_handle->WritePage(0, page);
