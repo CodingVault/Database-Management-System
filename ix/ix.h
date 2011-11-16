@@ -4,7 +4,6 @@
 
 #include <vector>
 #include <string>
-//#include <typeinfo>
 
 #include "../pf/pf.h"
 #include "../rm/rm.h"
@@ -162,6 +161,7 @@ class IX_IndexHandle {
   RC InsertEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
+
   template <typename KEY>
   RC WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
   template <typename KEY>
