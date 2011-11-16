@@ -570,7 +570,6 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 	{// usual case, child not deleted
 		return SUCCESS;
 	}
-
 	if( nodeLevel == 1 )
 	{// the current node is the root
 		keyNum = Node->keys.size();
@@ -1142,7 +1141,6 @@ IX_IndexHandle::IX_IndexHandle()
 	this->_int_index = NULL;
 	this->_float_index = NULL;
 }
-
 IX_IndexHandle::~IX_IndexHandle()
 {
 	//if (this->_key_type)

@@ -1,479 +1,1109 @@
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+
 #include <fstream>
 #include <iostream>
 #include <cassert>
-#include <vector>
 
 #include "rm.h"
-//#include "rm.cc"
-
-#define TABLE_NAME "test"
 
 using namespace std;
 
+RM *rm = RM::Instance();
 const int success = 0;
 
-//void testUpdateDirectory()
+
+// Function to prepare the data in the correct form to be inserted/read/updated
+void prepareTuple(const int name_length, const string name, const int age, const float height, const int salary, void *buffer, int *tuple_size)
+{
+    int offset = 0;
+    
+    memcpy((char *)buffer + offset, &name_length, sizeof(int));
+    offset += sizeof(int);    
+    memcpy((char *)buffer + offset, name.c_str(), name_length);
+    offset += name_length;
+    
+    memcpy((char *)buffer + offset, &age, sizeof(int));
+    offset += sizeof(int);
+    
+    memcpy((char *)buffer + offset, &height, sizeof(float));
+    offset += sizeof(float);
+    
+    memcpy((char *)buffer + offset, &salary, sizeof(int));
+    offset += sizeof(int);
+    
+    *tuple_size = offset;
+}
+
+
+// Function to parse the data in buffer and print each field
+void printTuple(const void *buffer, const int tuple_size)
+{
+    int offset = 0;
+    cout << "****Printing Buffer: Start****" << endl;
+   
+    int name_length = 0;     
+    memcpy(&name_length, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "name_length: " << name_length << endl;
+   
+    char *name = (char *)malloc(100);
+    memcpy(name, (char *)buffer+offset, name_length);
+    name[name_length] = '\0';
+    offset += name_length;
+    cout << "name: " << name << endl;
+    
+    int age = 0; 
+    memcpy(&age, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "age: " << age << endl;
+   
+    float height = 0.0; 
+    memcpy(&height, (char *)buffer+offset, sizeof(float));
+    offset += sizeof(float);
+    cout << "height: " << height << endl;
+       
+    int salary = 0; 
+    memcpy(&salary, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "salary: " << salary << endl;
+
+    cout << "****Printing Buffer: End****" << endl << endl;    
+}
+
+
+// Function to get the data in the correct form to be inserted/read after adding
+// the attribute ssn
+void prepareTupleAfterAdd(const int name_length, const string name, const int age, const float height, const int salary, const int ssn, void *buffer, int *tuple_size)
+{
+    int offset=0;
+    
+    memcpy((char*)buffer + offset, &(name_length), sizeof(int));
+    offset += sizeof(int);    
+    memcpy((char*)buffer + offset, name.c_str(), name_length);
+    offset += name_length;
+    
+    memcpy((char*)buffer + offset, &age, sizeof(int));
+    offset += sizeof(int);
+        
+    memcpy((char*)buffer + offset, &height, sizeof(float));
+    offset += sizeof(float);
+        
+    memcpy((char*)buffer + offset, &salary, sizeof(int));
+    offset += sizeof(int);
+    
+    memcpy((char*)buffer + offset, &ssn, sizeof(int));
+    offset += sizeof(int);
+
+    *tuple_size = offset;
+}
+
+
+void printTupleAfterDrop( const void *buffer, const int tuple_size)
+{
+    int offset = 0;
+    cout << "****Printing Buffer: Start****" << endl;
+   
+    int name_length = 0;     
+    memcpy(&name_length, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "name_length: " << name_length << endl;
+   
+    char *name = (char *)malloc(100);
+    memcpy(name, (char *)buffer+offset, name_length);
+    name[name_length] = '\0';
+    offset += name_length;
+    cout << "name: " << name << endl;
+    
+    int age = 0; 
+    memcpy(&age, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "age: " << age << endl;
+   
+    float height = 0.0; 
+    memcpy(&height, (char *)buffer+offset, sizeof(float));
+    offset += sizeof(float);
+    cout << "height: " << height << endl;
+       
+    cout << "****Printing Buffer: End****" << endl << endl;    
+}   
+
+
+void printTupleAfterAdd(const void *buffer, const int tuple_size)
+{
+    int offset = 0;
+    cout << "****Printing Buffer: Start****" << endl;
+   
+    int name_length = 0;     
+    memcpy(&name_length, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "name_length: " << name_length << endl;
+   
+    char *name = (char *)malloc(100);
+    memcpy(name, (char *)buffer+offset, name_length);
+    name[name_length] = '\0';
+    offset += name_length;
+    cout << "name: " << name << endl;
+    
+    int age = 0; 
+    memcpy(&age, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "age: " << age << endl;
+   
+    float height = 0; 
+    memcpy(&height, (char *)buffer+offset, sizeof(float));
+    offset += sizeof(float);
+    cout << "height: " << height << endl;
+	
+	int salary = 0; 
+    memcpy(&salary, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "salary: " << salary << endl;
+    
+    int ssn = 0;   
+    memcpy(&ssn, (char *)buffer+offset, sizeof(int));
+    offset += sizeof(int);
+    cout << "SSN: " << ssn << endl;
+
+    cout << "****Printing Buffer: End****" << endl << endl;    
+}
+
+
+// Create an employee table
+void createTable(const string tablename)
+{
+    cout << "****Create Table " << tablename << " ****" << endl;
+    
+    // 1. Create Table ** -- made separate now.
+    vector<Attribute> attrs;
+
+    Attribute attr;
+    attr.name = "EmpName";
+    attr.type = TypeVarChar;
+    attr.length = (AttrLength)30;
+    attrs.push_back(attr);
+
+    attr.name = "Age";
+    attr.type = TypeInt;
+    attr.length = (AttrLength)4;
+    attrs.push_back(attr);
+
+    attr.name = "Height";
+    attr.type = TypeReal;
+    attr.length = (AttrLength)4;
+    attrs.push_back(attr);
+
+    attr.name = "Salary";
+    attr.type = TypeInt;
+    attr.length = (AttrLength)4;
+    attrs.push_back(attr);
+
+    RC rc = rm->createTable(tablename, attrs);
+    assert(rc == success);
+    cout << "****Table Created: " << tablename << " ****" << endl << endl;
+}
+
+
+void prepareLargeTuple(const int index, void *buffer, int *size)
+{
+    int offset = 0;
+    
+    // compute the count
+    int count = index % 50 + 1;
+
+    // compute the letter
+    char text = index % 26 + 97;
+
+    for(int i = 0; i < 10; i++)
+    {
+        memcpy((char *)buffer + offset, &count, sizeof(int));
+        offset += sizeof(int);
+
+        for(int j = 0; j < count; j++)
+        {
+            memcpy((char *)buffer + offset, &text, 1);
+            offset += 1;
+        }
+   
+        // compute the integer 
+        memcpy((char *)buffer + offset, &index, sizeof(int));
+        offset += sizeof(int);
+   
+        // compute the floating number
+        float real = (float)(index + 1); 
+        memcpy((char *)buffer + offset, &real, sizeof(float));
+        offset += sizeof(float);
+    }
+    *size = offset; 
+}
+
+
+// Create a large table for pressure test
+void createLargeTable(const string tablename)
+{
+    cout << "****Create Large Table " << tablename << " ****" << endl;
+    
+    // 1. Create Table ** -- made separate now.
+    vector<Attribute> attrs;
+
+    int index = 0;
+    char *suffix = (char *)malloc(10);
+    for(int i = 0; i < 10; i++)
+    {
+        Attribute attr;
+        sprintf(suffix, "%d", index);
+        attr.name = "attr";
+        attr.name += suffix;
+        attr.type = TypeVarChar;
+        attr.length = (AttrLength)50;
+        attrs.push_back(attr);
+        index++;
+
+        sprintf(suffix, "%d", index);
+        attr.name = "attr";
+        attr.name += suffix;
+        attr.type = TypeInt;
+        attr.length = (AttrLength)4;
+        attrs.push_back(attr);
+        index++;
+
+        sprintf(suffix, "%d", index);
+        attr.name = "attr";
+        attr.name += suffix;
+        attr.type = TypeReal;
+        attr.length = (AttrLength)4;
+        attrs.push_back(attr);
+        index++;
+    }
+
+    RC rc = rm->createTable(tablename, attrs);
+    assert(rc == success);
+    cout << "****Large Table Created: " << tablename << " ****" << endl << endl;
+
+    free(suffix);
+}
+
+
+void secA_0(const string tablename)
+{
+    // Functions Tested
+    // 1. Get Attributes
+    cout << "****In Test Case 0****" << endl;
+
+    // GetAttributes
+    vector<Attribute> attrs;
+    RC rc = rm->getAttributes(tablename, attrs);
+    assert(rc == success);
+
+    for(unsigned i = 0; i < attrs.size(); i++)
+    {
+        cout << "Attribute Name: " << attrs[i].name << endl;
+        cout << "Attribute Type: " << (AttrType)attrs[i].type << endl;
+        cout << "Attribute Length: " << attrs[i].length << endl << endl;
+    }
+    return;
+}
+
+
+void secA_1(const string tablename, const int name_length, const string name, const int age, const float height, const int salary)
+{
+    // Functions tested
+    // 1. Create Table ** -- made separate now.
+    // 2. Insert Tuple **
+    // 3. Read Tuple **
+    // NOTE: "**" signifies the new functions being tested in this test case. 
+    cout << "****In Test Case 1****" << endl;
+   
+    RID rid; 
+    int tuple_size = 0;
+    void *tuple = malloc(100);
+    void *data_returned = malloc(100);
+
+    // Insert a tuple into a table
+    prepareTuple(name_length, name, age, height, salary, tuple, &tuple_size);
+    cout << "Insert Data:" << endl;
+    printTuple(tuple, tuple_size);
+    RC rc = rm->insertTuple(tablename, tuple, rid);
+    assert(rc == success);
+    
+    // Given the rid, read the tuple from table
+    rc = rm->readTuple(tablename, rid, data_returned);
+    assert(rc == success);
+
+    cout << "Returned Data:" << endl;
+    printTuple(data_returned, tuple_size);
+
+    // Compare whether the two memory blocks are the same
+    if(memcmp(tuple, data_returned, tuple_size) == 0)
+    {
+        cout << "****Test case 1 passed****" << endl << endl;
+    }
+    else
+    {
+        cout << "****Test case 1 failed****" << endl << endl;
+    }
+
+    free(tuple);
+    free(data_returned);
+    return;
+}
+
+
+void secA_2(const string tablename, const int name_length, const string name, const int age, const float height, const int salary)
+{
+    // Functions Tested
+    // 1. Insert tuple
+    // 2. Delete Tuple **
+    // 3. Read Tuple
+    cout << "****In Test Case 2****" << endl;
+   
+    RID rid; 
+    int tuple_size = 0;
+    void *tuple = malloc(100);
+    void *data_returned = malloc(100);
+
+    // Test Insert the Tuple    
+    prepareTuple(name_length, name, age, height, salary, tuple, &tuple_size);
+    cout << "Insert Data:" << endl;
+    printTuple(tuple, tuple_size);
+    RC rc = rm->insertTuple(tablename, tuple, rid);
+    assert(rc == success);
+
+    // Test Delete Tuple
+    rc = rm->deleteTuple(tablename, rid);
+    assert(rc == success);
+
+    // Test Read Tuple
+    memset(data_returned, 0, 100);
+    rc = rm->readTuple(tablename, rid, data_returned);
+    assert(rc != success);
+
+    cout << "After Deletion." << endl;
+    
+    // Compare the two memory blocks to see whether they are different
+    if (memcmp(tuple, data_returned, tuple_size) != 0)
+    {   
+        cout << "****Test case 2 passed****" << endl << endl;
+    }
+    else
+    {
+        cout << "****Test case 2 failed****" << endl << endl;
+    }
+        
+    free(tuple);
+    free(data_returned);
+    return;
+}
+
+
+void secA_3(const string tablename, const int name_length, const string name, const int age, const float height, const int salary)
+{
+    // Functions Tested
+    // 1. Insert Tuple    
+    // 2. Update Tuple **
+    // 3. Read Tuple
+    cout << "****In Test Case 3****" << endl;
+   
+    RID rid; 
+    int tuple_size = 0;
+    int tuple_size_updated = 0;
+    void *tuple = malloc(100);
+    void *tuple_updated = malloc(100);
+    void *data_returned = malloc(100);
+   
+    // Test Insert Tuple 
+    prepareTuple(name_length, name, age, height, salary, tuple, &tuple_size);
+    RC rc = rm->insertTuple(tablename, tuple, rid);
+    assert(rc == success);
+    cout << "Original RID slot = " << rid.slotNum << endl;
+
+    // Test Update Tuple
+    prepareTuple(6, "Newman", age, height, 100, tuple_updated, &tuple_size_updated);
+    rc = rm->updateTuple(tablename, tuple_updated, rid);
+    assert(rc == success);
+    cout << "Updated RID slot = " << rid.slotNum << endl;
+
+    // Test Read Tuple 
+    rc = rm->readTuple(tablename, rid, data_returned);
+    assert(rc == success);
+    cout << "Read RID slot = " << rid.slotNum << endl;
+   
+    // Print the tuples 
+    cout << "Insert Data:" << endl; 
+    printTuple(tuple, tuple_size);
+
+    cout << "Updated data:" << endl;
+    printTuple(tuple_updated, tuple_size_updated);
+
+    cout << "Returned Data:" << endl;
+    printTuple(data_returned, tuple_size_updated);
+    
+    if (memcmp(tuple_updated, data_returned, tuple_size_updated) == 0)
+    {
+        cout << "****Test case 3 passed****" << endl << endl;
+    }
+    else
+    {
+        cout << "****Test case 3 failed****" << endl << endl;
+    }
+
+    free(tuple);
+    free(tuple_updated);
+    free(data_returned);
+    return;
+}
+
+
+void secA_4(const string tablename, const int name_length, const string name, const int age, const float height, const int salary)
+{
+    // Functions Tested
+    // 1. Insert tuple
+    // 2. Read Attributes **
+    cout << "****In Test Case 4****" << endl;
+    
+    RID rid;    
+    int tuple_size = 0;
+    void *tuple = malloc(100);
+    void *data_returned = malloc(100);
+    
+    // Test Insert Tuple 
+    prepareTuple(name_length, name, age, height, salary, tuple, &tuple_size);
+    RC rc = rm->insertTuple(tablename, tuple, rid);
+    assert(rc == success);
+
+    // Test Read Attribute
+    rc = rm->readAttribute(tablename, rid, "Salary", data_returned);
+    assert(rc == success);
+ 
+    cout << "Salary: " << *(int *)data_returned << endl;
+    if (memcmp((char *)data_returned, (char *)tuple+18, 4) != 0)
+    {
+        cout << "****Test case 4 failed" << endl << endl;
+    }
+    else
+    {
+        cout << "****Test case 4 passed" << endl << endl;
+    }
+    
+    free(tuple);
+    free(data_returned);
+    return;
+}
+
+
+void secA_5(const string tablename, const int name_length, const string name, const int age, const float height, const int salary)
+{
+    // Functions Tested
+    // 0. Insert tuple;
+    // 1. Read Tuple
+    // 2. Delete Tuples **
+    // 3. Read Tuple
+    cout << "****In Test Case 5****" << endl;
+    
+    RID rid;
+    int tuple_size = 0;
+    void *tuple = malloc(100);
+    void *data_returned = malloc(100);
+    void *data_returned1 = malloc(100);
+   
+    // Test Insert Tuple 
+    prepareTuple(name_length, name, age, height, salary, tuple, &tuple_size);
+    RC rc = rm->insertTuple(tablename, tuple, rid);
+    assert(rc == success);
+
+    // Test Read Tuple
+    rc = rm->readTuple(tablename, rid, data_returned);
+    assert(rc == success);
+    printTuple(data_returned, tuple_size);
+
+    cout << "Now Deleting..." << endl;
+
+    // Test Delete Tuples
+    rc = rm->deleteTuples(tablename);
+    assert(rc == success);
+    
+    // Test Read Tuple
+    memset((char*)data_returned1, 0, 100);
+    rc = rm->readTuple(tablename, rid, data_returned1);
+    assert(rc != success);
+    printTuple(data_returned1, tuple_size);
+    
+    if(memcmp(tuple, data_returned1, tuple_size) != 0)
+    {
+        cout << "****Test case 5 passed****" << endl << endl;
+    }
+    else
+    {
+        cout << "****Test case 5 failed****" << endl << endl;
+    }
+       
+    free(tuple);
+    free(data_returned);
+    free(data_returned1);
+    return;
+}
+
+
+void secA_6(const string tablename, const int name_length, const string name, const int age, const float height, const int salary)
+{
+    // Functions Tested
+    // 0. Insert tuple;
+    // 1. Read Tuple
+    // 2. Delete Table **
+    // 3. Read Tuple
+    cout << "****In Test Case 6****" << endl;
+   
+    RID rid; 
+    int tuple_size = 0;
+    void *tuple = malloc(100);
+    void *data_returned = malloc(100);
+    void *data_returned1 = malloc(100);
+   
+    // Test Insert Tuple
+    prepareTuple(name_length, name, age, height, salary, tuple, &tuple_size);
+    RC rc = rm->insertTuple(tablename, tuple, rid);
+    assert(rc == success);
+
+    // Test Read Tuple 
+    rc = rm->readTuple(tablename, rid, data_returned);
+    assert(rc == success);
+
+    // Test Delete Table
+    rc = rm->deleteTable(tablename);
+    assert(rc == success);
+    cout << "After deletion!" << endl;
+    
+    // Test Read Tuple 
+    memset((char*)data_returned1, 0, 100);
+    rc = rm->readTuple(tablename, rid, data_returned1);
+    assert(rc != success);
+    
+    if(memcmp(data_returned, data_returned1, tuple_size) != 0)
+    {
+        cout << "****Test case 6 passed****" << endl << endl;
+    }
+    else
+    {
+        cout << "****Test case 6 failed****" << endl << endl;
+    }
+        
+    free(tuple);
+    free(data_returned);    
+    free(data_returned1);
+    return;
+}
+
+
+void secA_7(const string tablename)
+{
+    // Functions Tested
+    // 1. Reorganize Page **
+    // Insert records into one page, reorganize that page, 
+    // and use the same tids to read data. The results should 
+    // be the same as before. Will check code as well.
+    cout << "****In Test Case 7****" << endl;
+   
+    RID rid; 
+    int tuple_size = 0;
+    int num_records = 5;
+    void *tuple;
+    void *data_returned = malloc(100);
+
+    int sizes[num_records];
+    RID rids[num_records];
+    vector<char *> tuples;
+
+    RC rc = 0;
+    for(int i = 0; i < num_records; i++)
+    {
+        tuple = malloc(100);
+
+        // Test Insert Tuple
+        float height = (float)i;
+        prepareTuple(6, "Tester", 20+i, height, 123, tuple, &tuple_size);
+        rc = rm->insertTuple(tablename, tuple, rid);
+        assert(rc == success);
+
+        tuples.push_back((char *)tuple);
+        sizes[i] = tuple_size;
+        rids[i] = rid;
+        cout << rid.pageNum << endl;
+    }
+    cout << "After Insertion!" << endl;
+    
+    int pageid = 0; // Depends on which page the records are
+    rc = rm->reorganizePage(tablename, pageid);
+    assert(rc == success);
+
+    // Print out the tuples one by one
+    int i = 0;
+    for (i = 0; i < num_records; i++)
+    {
+        rc = rm->readTuple(tablename, rids[i], data_returned);
+        assert(rc == success);
+        printTuple(data_returned, tuple_size);
+
+        //if any of the tuples are not the same as what we entered them to be ... there is a problem with the reorganization.
+        if (memcmp(tuples[i], data_returned, sizes[i]) != 0)
+        {      
+            cout << "****Test case 7 failed****" << endl << endl;
+            break;
+        }
+    }
+    if(i == num_records)
+    {
+        cout << "****Test case 7 passed****" << endl << endl;
+    }
+    
+    // Delete Table    
+    rc = rm->deleteTable(tablename);
+    assert(rc == success);
+
+    free(data_returned);
+    for(i = 0; i < num_records; i++)
+    {
+        free(tuples[i]);
+    }
+    return;
+}
+
+
+//void secA_8(const string tablename)
 //{
-//	  Slot slots[9];
-//	  Slot slot1;
-//	  slot1.flag = 0;
-//	  slot1.offset = 0;
-//	  slot1.length = 33;
-//	  Slot slot2;
-//	  slot2.flag = 1;
-//	  slot2.offset = 33;
-//	  slot2.length = 52;
-//	  Slot slot3;
-//	  slot3.flag = 0;
-//	  slot3.offset = 85;
-//	  slot3.length = 69;
-//	  Slot slot4;
-//	  slot4.flag = 1;
-//	  slot4.offset = 154;
-//	  slot4.length = 31;
-//	  Slot slot5;
-//	  slot5.flag = 0;
-//	  slot5.offset = 185;
-//	  slot5.length = 24;
-//	  slots[0] = slot1;
-//	  slots[1] = slot2;
-//	  slots[2] = slot3;
-//	  slots[3] = slot4;
-//	  slots[4] = slot5;
+//    // Functions Tested
+//    // 1. Simple scan **
+//    cout << "****In Test Case 8****" << endl;
 //
-//	  unsigned count = 4;
-//	  updateDirectory(slots, count, 2, 53);
-//	  for (unsigned short index = 0; index < count + 1; index++)
-//	  {
-//		  Slot slot = slots[index];
-//		  cout << "Slot: " << slot.flag << ":" << slot.offset << ":" << slot.length << endl;
-//	  }
+//    RID rid;
+//    int tuple_size = 0;
+//    int num_records = 5;
+//    void *tuple;
+//    void *data_returned = malloc(100);
+//
+//    int sizes[num_records];
+//    RID rids[num_records];
+//    vector<char *> tuples;
+//
+//    RC rc = 0;
+//    for(int i = 0; i < num_records; i++)
+//    {
+//        tuple = malloc(100);
+//
+//        // Insert Tuple
+//        float height = (float)i;
+//        prepareTuple(6, "Tester", 20+i, height, 123, tuple, &tuple_size);
+//        rc = rm->insertTuple(tablename, tuple, rid);
+//        assert(rc == success);
+//
+//        tuples.push_back((char *)tuple);
+//        sizes[i] = tuple_size;
+//        rids[i] = rid;
+//    }
+//    cout << "After Insertion!" << endl;
+//
+//    // Set up the iterator
+//    RM_ScanIterator rmsi;
+//    string attr = "Age";
+//    vector<string> attributes;
+//    attributes.push_back(attr);
+//    rc = rm->scan(tablename, "", NO_OP, NULL, attributes, rmsi);
+//    assert(rc == success);
+//
+//    cout << "Scanned Data:" << endl;
+//
+//    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
+//    {
+//        cout << "Age: " << *(int *)data_returned << endl;
+//    }
+//    rmsi.close();
+//
+//    // Deleta Table
+//    rc = rm->deleteTable(tablename);
+//    assert(rc == success);
+//
+//    free(data_returned);
+//    for(int i = 0; i < num_records; i++)
+//    {
+//        free(tuples[i]);
+//    }
+//
+//    return;
 //}
 
-void rmBasicTest()
+
+void secA_9(const string tablename, vector<RID> &rids, vector<int> &sizes)
 {
-	RM *rm = RM::Instance();
-	RC rc = -1;
+    // Functions Tested:
+    // 1. create table
+    // 2. getAttributes
+    // 3. insert tuple
+    cout << "****In Test case 9****" << endl;
 
-	vector<Attribute> attrs;
-	// get attributes
-	rm->getAttributes("catalog", attrs);
-	for (unsigned index = 0; index < attrs.size(); index++)
-	{
-		Attribute attr = attrs[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from catalog." << endl << endl << endl;
+    RID rid; 
+    void *tuple = malloc(1000);
+    int num_records = 2000;
 
-	// create table "test"
-	attrs.resize(2);
-	Attribute attr1;
-	attr1.name = "id";
-	attr1.type = AttrType(0);
-	attr1.length = 4;
-	Attribute attr2;
-	attr2.name = "name";
-	attr2.type = AttrType(2);
-	attr2.length = 20;
-	attrs[0] = attr1;
-	attrs[1] = attr2;
-	rc = rm->createTable(TABLE_NAME, attrs);
-	assert(rc == success);
-	cout << "######## SUCCESS: create table [" << TABLE_NAME << "]." << endl << endl << endl;
+    // GetAttributes
+    vector<Attribute> attrs;
+    RC rc = rm->getAttributes(tablename, attrs);
+    assert(rc == success);
 
-	// get attributes
-	vector<Attribute> attrs1;
-	rc = rm->getAttributes(TABLE_NAME, attrs1);
-	for (unsigned index = 0; index < attrs1.size(); index++)
-	{
-		Attribute attr = attrs1[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	assert(rc == success);
-	cout << "######## SUCCESS: read attributes from table [" << TABLE_NAME << "]." << endl << endl << endl;
+    for(unsigned i = 0; i < attrs.size(); i++)
+    {
+        cout << "Attribute Name: " << attrs[i].name << endl;
+        cout << "Attribute Type: " << (AttrType)attrs[i].type << endl;
+        cout << "Attribute Length: " << attrs[i].length << endl << endl;
+    }
 
-	// insert tuple
-	// prepare "id"
-	int id = 10;
-	// prepare "name"
-	char name[] = "record_name";
-	int len = strlen(name);
-	// prepare tuple
-	unsigned short size = 4 + 4 + len;
-	char inTuple[size];
-	memcpy(inTuple, &id, 4);
-	memcpy(inTuple + 4, &len, 4);
-	memcpy(inTuple + 8, name, len);
-	// insertion
-	RID rid;
-	rc = rm->insertTuple(TABLE_NAME, inTuple, rid);
-	assert(rc == success);
-	cout << "######## SUCCESS: insert tuple into table [" << TABLE_NAME << "]." << endl << endl << endl;
+    // Insert 2000 tuples into table
+    for(int i = 0; i < num_records; i++)
+    {
+        // Test insert Tuple
+        int size = 0;
+        memset(tuple, 0, 1000);
+        prepareLargeTuple(i, tuple, &size);
 
-	// read tuple
-	char outTuple[size];
-	rc = rm->readTuple(TABLE_NAME, rid, outTuple);
-	// assertion
-	assert(rc == success);
-	assert(memcmp(&id, outTuple, 4) == success);
-	assert(memcmp(&len, outTuple + 4, 4) == success);
-	assert(memcmp(name, outTuple + 8, len) == success);
-	cout << "######## SUCCESS: read tuple from table [" << TABLE_NAME << "]." << endl << endl << endl;
+        rc = rm->insertTuple(tablename, tuple, rid);
+        assert(rc == success);
 
-	// read tuple with invalid RID
-	RID ridx;
-	ridx.pageNum = 100;
-	ridx.slotNum = 200;
-	rc = rm->readTuple(TABLE_NAME, ridx, outTuple);
-	assert(rc != success);
-	cout << "######## SUCCESS: cannot read with invalid RID." << endl << endl << endl;
+        rids.push_back(rid);
+        sizes.push_back(size);        
+    }
+    cout << "****Test case 9 passed****" << endl << endl;
 
-	// read attribute
-	char value[4 + len];
-	rc = rm->readAttribute(TABLE_NAME, rid, "name", value);
-	assert(rc == success);
-	assert(memcmp(&len, value, 4) == success);
-	assert(memcmp(name, (char *)value + 4, len) == success);
-	cout << "######## SUCCESS: read attribute from table [" << TABLE_NAME << "] at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl << endl << endl;
-
-	// insert another tuple
-	// prepare "id"
-	int id2 = 20;
-	// prepare "name"
-	char anotherName[] = "another_record_name";
-	int len2 = strlen(anotherName);
-	// prepare tuple
-	unsigned short size2 = 4 + 4 + len2;
-	char inTuple2[size2];
-	memcpy(inTuple2, &id2, 4);
-	memcpy(inTuple2 + 4, &len2, 4);
-	memcpy(inTuple2 + 8, anotherName, len2);
-	// insertion
-	RID rid2;
-	rc = rm->insertTuple(TABLE_NAME, inTuple2, rid2);
-	assert(rc == success);
-	cout << "######## SUCCESS: insert tuple into table [" << TABLE_NAME << "]." << endl;
-
-	// update tuples
-	rc = rm->updateTuple(TABLE_NAME, inTuple, rid2);
-	assert(rc == success);
-	cout << "######## SUCCESS: update tuple at [" << rid2.pageNum << ":" << rid2.slotNum << "]." << endl;
-	rc = rm->updateTuple(TABLE_NAME, inTuple2, rid);
-	assert(rc == success);
-	cout << "######## SUCCESS: update tuple at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
-	// read tuple
-	rm->readTuple(TABLE_NAME, rid2, outTuple);
-	// assertion
-	assert(memcmp(&id, outTuple, 4) == success);
-	assert(memcmp(&len, outTuple + 4, 4) == success);
-	assert(memcmp(name, outTuple + 8, len) == success);
-	cout << "######## SUCCESS: read tuple from table [" << TABLE_NAME << "] at [" << rid2.pageNum << ":" << rid2.slotNum << "]." << endl << endl << endl;
-
-	cout << endl << "************** SCAN **************" << endl;
-	RM_ScanIterator rmsi;
-	string attr = "id";
-	vector<string> attributes;
-	attributes.push_back(attr);
-	char chValue[4];
-	int iValue = 20;
-	memcpy(chValue, &iValue, 4);
-	rc = rm->scan(TABLE_NAME, "id", CompOp(4), chValue, attributes, rmsi);
-	assert(rc == success);
-	void *data_returned = malloc(100);
-	while (rmsi.getNextTuple(rid, data_returned) != RM_EOF)
-	{
-		cout << "ID: " << *(int *)data_returned << endl;
-	}
-	free(data_returned);
-	cout << "######## SUCCESS: scan table and project all ID fields." << endl << endl << endl;
-
-	// delete tuple
-	rc = rm->deleteTuple(TABLE_NAME, rid);
-	assert(rc == success);
-	cout << "######## SUCCESS: delete tuple from table [" << TABLE_NAME << "] at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
-	// reading tuple should be invalid
-	rc = rm->readTuple(TABLE_NAME, rid, outTuple);
-	assert(rc != success);
-	// try to delete data already removed
-	rc = rm->deleteTuple(TABLE_NAME, rid);
-	assert(rc != success);
-	cout << "######## SUCCESS: cannot read or delete data already deleted." << endl << endl << endl;
-
-	// delete all the tuples
-	rc = rm->deleteTuples(TABLE_NAME);
-	assert(rc == success);
-	cout << "######## SUCCESS: delete all tuples from table [" << TABLE_NAME << "]." << endl;
-	// reading tuple should be invalid
-	rc = rm->readTuple(TABLE_NAME, rid, outTuple);
-	assert(rc != success);
-	cout << "######## SUCCESS: cannot read data already deleted." << endl << endl << endl;
-
-	// re-organize page
-	rc = rm->reorganizePage(TABLE_NAME, 0);
-	assert(rc == success);
-	cout << "######## SUCCESS: re-organized table [" << TABLE_NAME << "]." << endl;
-	rc = rm->readTuple(TABLE_NAME, rid, outTuple);
-	assert(rc != success);
-	cout << "######## SUCCESS: cannot read data already deleted." << endl << endl << endl;
+    free(tuple);
 }
 
-void rmTableRebuildTest()
+
+void secA_10(const string tablename, const vector<RID> &rids, const vector<int> &sizes)
 {
-	RM *rm = RM::Instance();
+    // Functions Tested:
+    // 1. read tuple
+    cout << "****In Test case 10****" << endl;
 
-	vector<Attribute> attrs;
-	// get attributes
-	rm->getAttributes("catalog", attrs);
-	for (unsigned index = 0; index < attrs.size(); index++)
-	{
-		Attribute attr = attrs[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from catalog." << endl << endl << endl;
+    int num_records = 2000;
+    void *tuple = malloc(1000);
+    void *data_returned = malloc(1000);
 
-	// create table "test"
-	attrs.resize(2);
-	Attribute attr1;
-	attr1.name = "id";
-	attr1.type = AttrType(0);
-	attr1.length = 4;
-	Attribute attr2;
-	attr2.name = "name";
-	attr2.type = AttrType(2);
-	attr2.length = 20;
-	attrs[0] = attr1;
-	attrs[1] = attr2;
-	rm->createTable(TABLE_NAME, attrs);
-	cout << "######## SUCCESS: create table [" << TABLE_NAME << "]." << endl << endl << endl;
+    RC rc = 0;
+    for(int i = 0; i < num_records; i++)
+    {
+        memset(tuple, 0, 1000);
+        memset(data_returned, 0, 1000);
+        rc = rm->readTuple(tablename, rids[i], data_returned);
+        assert(rc == success);
 
-	// get attributes
-	vector<Attribute> attrs1;
-	rm->getAttributes(TABLE_NAME, attrs1);
-	for (unsigned index = 0; index < attrs1.size(); index++)
-	{
-		Attribute attr = attrs1[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from table [" << TABLE_NAME << "]." << endl << endl << endl;
+        int size = 0;
+        prepareLargeTuple(i, tuple, &size);
+        if(memcmp(data_returned, tuple, sizes[i]) != 0)
+        {
+            cout << "****Test case 10 failed****" << endl << endl;
+            return;
+        }
+    }
+    cout << "****Test case 10 passed****" << endl << endl;
 
-	// delete table
-	RC rc = rm->deleteTable(TABLE_NAME);
-	assert(rc == success);
-	cout << "######## SUCCESS: deleted table [" << TABLE_NAME << "]." << endl << endl << endl;
-
-	// create table "test"
-	attrs.resize(3);
-	attr1.name = "extra";
-	attr1.type = AttrType(2);
-	attr1.length = 20;
-	attr2.name = "id";
-	attr2.type = AttrType(0);
-	attr2.length = 4;
-	Attribute attr3;
-	attr3.name = "name";
-	attr3.type = AttrType(2);
-	attr3.length = 20;
-	attrs[0] = attr1;
-	attrs[1] = attr2;
-	attrs[2] = attr3;
-	rc = rm->createTable(TABLE_NAME, attrs);
-	assert(rc == success);
-	cout << "######## SUCCESS: create table [" << TABLE_NAME << "] again with different attributes." << endl;
-
-	// get attributes
-	vector<Attribute> attrs3;
-	rc = rm->getAttributes(TABLE_NAME, attrs3);
-	assert(rc == success);
-	for (unsigned index = 0; index < attrs3.size(); index++)
-	{
-		Attribute attr = attrs3[index];
-		cout << "Attribute: " << attr.name << "!" << AttrType(attr.type) << "!" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from table [" << TABLE_NAME << "]." << endl << endl << endl;
+    free(tuple);
+    free(data_returned);
 }
 
-void rmAddAttributeTest()
+
+//void secA_11(const string tablename, vector<RID> &rids, vector<int> &sizes)
+//{
+//    // Functions Tested:
+//    // 1. update tuple
+//    // 2. read tuple
+//    cout << "****In Test case 11****" << endl;
+//
+//    RC rc = 0;
+//    void *tuple = malloc(1000);
+//    void *data_returned = malloc(1000);
+//
+//    // Update the first 1000 records
+//    int size = 0;
+//    for(int i = 0; i < 1000; i++)
+//    {
+//        memset(tuple, 0, 1000);
+//        RID rid = rids[i];
+//
+//        prepareLargeTuple(i+10, tuple, &size);
+//        rc = rm->updateTuple(tablename, tuple, rid);
+//        assert(rc == success);
+//
+//        sizes[i] = size;
+//        rids[i] = rid;
+//    }
+//    cout << "Updated!" << endl;
+//
+//    // Read the recrods out and check integrity
+//    for(int i = 0; i < 1000; i++)
+//    {
+//        memset(tuple, 0, 1000);
+//        memset(data_returned, 0, 1000);
+//        prepareLargeTuple(i+10, tuple, &size);
+//        rc = rm->readTuple(tablename, rids[i], data_returned);
+//        assert(rc == success);
+//
+//        if(memcmp(data_returned, tuple, sizes[i]) != 0)
+//        {
+//            cout << "****Test case 11 failed****" << endl << endl;
+//            return;
+//        }
+//    }
+//    cout << "****Test case 11 passed****" << endl << endl;
+//
+//    free(tuple);
+//    free(data_returned);
+//}
+
+
+void secA_12(const string tablename, const vector<RID> &rids)
 {
-	RM *rm = RM::Instance();
+    // Functions Tested
+    // 1. delete tuple
+    // 2. read tuple
+    cout << "****In Test case 12****" << endl;
 
-	vector<Attribute> attrs;
-	// get attributes
-	rm->getAttributes("catalog", attrs);
-	for (unsigned index = 0; index < attrs.size(); index++)
-	{
-		Attribute attr = attrs[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from catalog." << endl << endl << endl;
+    RC rc = 0;
+    void * data_returned = malloc(1000);
 
-	// create table "test"
-	attrs.resize(2);
-	Attribute attr1;
-	attr1.name = "id";
-	attr1.type = AttrType(0);
-	attr1.length = 4;
-	Attribute attr2;
-	attr2.name = "name";
-	attr2.type = AttrType(2);
-	attr2.length = 20;
-	attrs[0] = attr1;
-	attrs[1] = attr2;
-	RC rc = rm->createTable(TABLE_NAME, attrs);
-	cout << "######## SUCCESS: create table [" << TABLE_NAME << "]." << endl << endl << endl;
+    // Delete the first 1000 records
+    for(int i = 0; i < 1000; i++)
+    {
+        rc = rm->deleteTuple(tablename, rids[i]);
+        assert(rc == success);
 
-	// get attributes
-	vector<Attribute> attrs1;
-	rm->getAttributes(TABLE_NAME, attrs1);
-	for (unsigned index = 0; index < attrs1.size(); index++)
-	{
-		Attribute attr = attrs1[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from table [" << TABLE_NAME << "]." << endl << endl << endl;
+        rc = rm->readTuple(tablename, rids[i], data_returned);
+        assert(rc != success);
+    }
+    cout << "After deletion!" << endl;
 
-	// insert tuple
-	// prepare "id"
-	int id = 10;
-	// prepare "name"
-	char name[] = "record_name";
-	int len = strlen(name);
-	// prepare tuple
-	unsigned short size = 4 + 4 + len;
-	char inTuple[size];
-	memcpy(inTuple, &id, 4);
-	memcpy(inTuple + 4, &len, 4);
-	memcpy(inTuple + 8, name, len);
-	// insertion
-	RID rid;
-	rm->insertTuple(TABLE_NAME, inTuple, rid);
-	cout << "######## SUCCESS: insert tuple into table [" << TABLE_NAME << "]." << endl << endl << endl;
+    for(int i = 1000; i < 2000; i++)
+    {
+        rc = rm->readTuple(tablename, rids[i], data_returned);
+        assert(rc == success);
+    }
+    cout << "****Test case 12 passed****" << endl << endl;
 
-	// read tuple
-	char outTuple[size];
-	rm->readTuple(TABLE_NAME, rid, outTuple);
-	// assertion
-	assert(memcmp(&id, outTuple, 4) == success);
-	assert(memcmp(&len, outTuple + 4, 4) == success);
-	assert(memcmp(name, outTuple + 8, len) == success);
-	cout << "######## SUCCESS: read tuple from table [" << TABLE_NAME << "]." << endl << endl << endl;
-
-	// add new attributes
-	Attribute newAttr1;
-	newAttr1.name = "extraFloat";
-	newAttr1.type = AttrType(1);
-	newAttr1.length = 4;
-	rc = rm->addAttribute(TABLE_NAME, newAttr1);
-	assert(rc == success);
-	cout << "######## SUCCESS: add new attribute [" << newAttr1.name << "] to table [" << TABLE_NAME << "]." << endl;
-	Attribute newAttr2;
-	newAttr2.name = "extraVarChar";
-	newAttr2.type = AttrType(2);
-	newAttr2.length = 30;
-	rc = rm->addAttribute(TABLE_NAME, newAttr2);
-	assert(rc == success);
-	cout << "######## SUCCESS: add new attribute [" << newAttr2.name << "] to table [" << TABLE_NAME << "]." << endl;
-	newAttr2.name = "extraVarChar";
-	newAttr2.type = AttrType(2);
-	newAttr2.length = 30;
-	rc = rm->addAttribute(TABLE_NAME, newAttr2);
-	assert(rc != success);
-	cout << "######## SUCCESS: cannot add an attribute already exists to table [" << TABLE_NAME << "]." << endl;
-	// get attributes
-	attrs1.clear();
-	rm->getAttributes(TABLE_NAME, attrs1);
-	for (unsigned index = 0; index < attrs1.size(); index++)
-	{
-		Attribute attr = attrs1[index];
-		cout << "Attribute: " << attr.name << ":" << AttrType(attr.type) << ":" << attr.length << endl;
-	}
-	cout << "######## SUCCESS: read attributes from table [" << TABLE_NAME << "]." << endl << endl << endl;
-
-	// read tuple
-	char newOutTuple[size + 10];
-	rc = rm->readTuple(TABLE_NAME, rid, newOutTuple);
-	// assertion
-	assert(rc == success);
-	assert(memcmp(&id, newOutTuple, 4) == success);
-	assert(memcmp(&len, newOutTuple + 4, 4) == success);
-	assert(memcmp(name, newOutTuple + 8, len) == success);
-	float fDefault = 0.0F;
-	unsigned lenDefault = 0;
-	string empty = "";
-	assert(memcmp(&fDefault, newOutTuple + 8 + len, 4) == success);
-	assert(memcmp(&lenDefault, newOutTuple + 12 + len, 4) == success);
-	assert(memcmp(empty.c_str(), newOutTuple + 16 + len, 1) == success);
-	cout << "######## SUCCESS: read tuple from table [" << TABLE_NAME << "] after adding attributes." << endl << endl << endl;
-
-	// read attribute
-	char value[10];
-	string attr = "extraFloat";
-	rc = rm->readAttribute(TABLE_NAME, rid, attr, value);
-	assert(rc == success);
-	assert(memcmp(&fDefault, value, 4) == success);
-	cout << "Value read is: " << *(float *)value << endl;
-	cout << "######## SUCCESS: read attribute [" << attr << "] from table [" << TABLE_NAME << "] at ";
-	cout << "[" << rid.pageNum << ":" << rid.slotNum << "] after adding attributes." << endl;
-	attr = "extraVarChar";
-	rc = rm->readAttribute(TABLE_NAME, rid, attr, value);
-	assert(rc == success);
-	assert(memcmp(&lenDefault, value, 4) == success);
-	assert(memcmp(empty.c_str(), (char *)value + 4, 1) == success);
-	cout << "Value read is: " << *(char *)value << endl;
-	cout << "######## SUCCESS: read attribute [" << attr << "] from table [" << TABLE_NAME << "] at ";
-	cout << "[" << rid.pageNum << ":" << rid.slotNum << "] after adding attributes." << endl << endl << endl;
+    free(data_returned);
 }
 
-void rmReorganizeTableTest()
+
+//void secA_13(const string tablename)
+//{
+//    // Functions Tested
+//    // 1. scan
+//    cout << "****In Test case 13****" << endl;
+//
+//    RM_ScanIterator rmsi;
+//    vector<string> attrs;
+//    attrs.push_back("attr5");
+//    attrs.push_back("attr12");
+//    attrs.push_back("attr28");
+//
+//    RC rc = rm->scan(tablename, "", NO_OP, NULL, attrs, rmsi);
+//    assert(rc == success);
+//
+//    RID rid;
+//    int j = 0;
+//    void *data_returned = malloc(1000);
+//
+//    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
+//    {
+//        if(j % 200 == 0)
+//        {
+//            int offset = 0;
+//
+//            cout << "Real Value: " << *(float *)(data_returned) << endl;
+//            offset += 4;
+//
+//            int size = *(int *)((char *)data_returned + offset);
+//            cout << "String size: " << size << endl;
+//            offset += 4;
+//
+//            char *buffer = (char *)malloc(size + 1);
+//            memcpy(buffer, (char *)data_returned + offset, size);
+//            buffer[size] = 0;
+//            offset += size;
+//
+//            cout << "Char Value: " << buffer << endl;
+//
+//            cout << "Integer Value: " << *(int *)((char *)data_returned + offset ) << endl << endl;
+//            offset += 4;
+//
+//            free(buffer);
+//        }
+//        j++;
+//        memset(data_returned, 0, 1000);
+//    }
+//    rmsi.close();
+//    cout << "Total number of records: " << j << endl << endl;
+//
+//    free(data_returned);
+//}
+
+
+void secA_14(const string tablename, const vector<RID> &rids)
 {
-	rmBasicTest();
+    // Functions Tested
+    // 1. reorganize page
+    // 2. delete tuples
+    // 3. delete table
+    cout << "****In Test case 14****" << endl;
 
-	RM *rm = RM::Instance();
+    RC rc;
+    rc = rm->reorganizePage(tablename, rids[1000].pageNum);
+    assert(rc == success);
 
-	// insert tuple
-	// prepare "id"
-	int id = 10;
-	// prepare "name"
-	char name[] = "record_name";
-	int len = strlen(name);
-	// prepare tuple
-	unsigned short size = 4 + 4 + len;
-	char inTuple[size];
-	memcpy(inTuple, &id, 4);
-	memcpy(inTuple + 4, &len, 4);
-	memcpy(inTuple + 8, name, len);
-	// insertion
-	RID rid;
-	rm->insertTuple(TABLE_NAME, inTuple, rid);
-	cout << "######## SUCCESS: insert tuple into table [" << TABLE_NAME << "]." << endl << endl << endl;
+    rc = rm->deleteTuples(tablename);
+    assert(rc == success);
 
-	// re-organize table
-	RC rc = rm->reorganizeTable(TABLE_NAME);
-	assert(rc == success);
-	cout << "######## SUCCESS: re-organize table [" << TABLE_NAME << "]." << endl << endl << endl;
+    rc = rm->deleteTable(tablename);
+    assert(rc == success);
 
-	// read tuple
-	char outTuple[size];
-	rc = rm->readTuple(TABLE_NAME, rid, outTuple);
-	// assertion
-	assert(rc != success);
-	rid.slotNum = 0;
-	rc = rm->readTuple(TABLE_NAME, rid, outTuple);
-	assert(memcmp(&id, outTuple, 4) == success);
-	assert(memcmp(&len, outTuple + 4, 4) == success);
-	assert(memcmp(name, outTuple + 8, len) == success);
-	cout << "######## SUCCESS: read tuple from table [" << TABLE_NAME << "]." << endl << endl << endl;
+    cout << "****Test case 14 passed****" << endl << endl;
 }
+
+
+void secA_15(const string tablename) {
+
+    cout << "****In Test case 15****" << endl;
+    
+    RID rid;    
+    int tuple_size = 0;
+    int num_records = 500;
+    void *tuple;
+    void *data_returned = malloc(100);
+    int age_ret_val = 25;
+
+    RID rids[num_records];
+    vector<char *> tuples;
+
+    RC rc = 0;
+    int age;
+    for(int i = 0; i < num_records; i++)
+    {
+        tuple = malloc(100);
+
+        // Insert Tuple
+        float height = (float)i;
+        
+        age = (rand()%20) + 15;
+        
+        prepareTuple(6, "Tester", age, height, 123, tuple, &tuple_size);
+        rc = rm->insertTuple(tablename, tuple, rid);
+        assert(rc == success);
+
+        tuples.push_back((char *)tuple);
+        rids[i] = rid;
+    }
+    cout << "After Insertion!" << endl;
+
+    // Set up the iterator
+    RM_ScanIterator rmsi;
+    string attr = "Age";
+    vector<string> attributes;
+    attributes.push_back(attr); 
+    rc = rm->scan(tablename, attr, GT_OP, &age_ret_val, attributes, rmsi);
+    assert(rc == success); 
+
+    cout << "Scanned Data:" << endl;
+    
+    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
+    {
+        cout << "Age: " << *(int *)data_returned << endl;
+        assert ( (*(int *) data_returned) > age_ret_val );
+    }
+    rmsi.close();
+    
+    // Deleta Table
+    rc = rm->deleteTable(tablename);
+    assert(rc == success);
+
+    free(data_returned);
+    for(int i = 0; i < num_records; i++)
+    {
+        free(tuples[i]);
+    }
+    
+    cout << "****Test case 15 passed****" << endl << endl;
+}
+
+
+void Tests()
+{
+    // GetAttributes
+    secA_0("tbl_employee");
+
+    // Insert/Read Tuple
+    secA_1("tbl_employee", 6, "Peters", 24, 170.1, 5000);
+
+    // Delete Tuple
+    secA_2("tbl_employee", 6, "Victor", 22, 180.2, 6000);
+
+    // Update Tuple
+    secA_3("tbl_employee", 6, "Thomas", 28, 187.3, 4000);
+
+    // Read Attributes
+    secA_4("tbl_employee", 6, "Veekay", 27, 171.4, 9000);
+
+    // Delete Tuples
+    secA_5("tbl_employee", 6, "Dillon", 29, 172.5, 7000);
+
+    // Delete Table
+    secA_6("tbl_employee", 6, "Martin", 26, 173.6, 8000);
+    
+    // Reorganize Page
+    createTable("tbl_employee2");
+    secA_7("tbl_employee2");
+
+    // Simple Scan
+//    createTable("tbl_employee3");
+//    secA_8("tbl_employee3");
+	
+	// Pressure Test
+    createLargeTable("tbl_employee4");
+
+    vector<RID> rids;
+    vector<int> sizes;
+
+    // Insert Tuple
+    secA_9("tbl_employee4", rids, sizes);
+    // Read Tuple
+    secA_10("tbl_employee4", rids, sizes);
+
+    // Update Tuple
+//    secA_11("tbl_employee4", rids, sizes);
+
+    // Delete Tuple
+    secA_12("tbl_employee4", rids);
+
+    // Scan
+//    secA_13("tbl_employee4");
+
+    // DeleteTuples/Table
+    secA_14("tbl_employee4", rids);
+    
+    // Scan with conditions
+    createTable("tbl_b_employee4");  
+    secA_15("tbl_b_employee4");
+    
+    return;
+}
+
 
 int main()
 {
-  cout << "test..." << endl;
+    // Basic Functions
+    cout << endl << "Test Basic Functions..." << endl;
 
-//  rmBasicTest();
-//  rmTableRebuildTest();
-//  rmAddAttributeTest();
-//  rmReorganizeTableTest();
+    // Create Table
+    createTable("tbl_employee");
 
-//  testUpdateDirectory();
+    Tests();
 
-  cout << "OK" << endl;
+    return 0;
 }
+
