@@ -158,16 +158,16 @@ class IX_IndexHandle {
   template <typename KEY>
   RC InitTree(BTree<KEY> **tree);
   template <typename KEY>
-  RC InsertEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
-  template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
   template <typename KEY>
   RC WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
-
- private:
   RC LoadMetadata();
   template <typename KEY>
   RC UpdateMetadata(const BTree<KEY> *tree);
+
+ private:
+  template <typename KEY>
+  RC InsertEntry(BTree<KEY> **tree, void *key, const RID &rid);
 
  private:
   PF_FileHandle *_pf_handle;

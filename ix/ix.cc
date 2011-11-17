@@ -1343,15 +1343,6 @@ RC IX_IndexHandle::InitTree(BTree<KEY> **tree)
 	return SUCCESS;
 }
 
-template <typename KEY>
-RC IX_IndexHandle::InsertEntry(BTree<KEY> **tree, const KEY key, const RID &rid)
-{
-	if (*tree == NULL)
-		this->InitTree(tree);
-
-	return (*tree)->InsertEntry(key, rid);
-}
-
 RC IX_IndexHandle::LoadMetadata()
 {
 	RC rc = SUCCESS;
@@ -1391,6 +1382,25 @@ RC IX_IndexHandle::UpdateMetadata(const BTree<KEY> *tree)
 	return rc;
 }
 
+template <typename KEY>
+RC IX_IndexHandle::InsertEntry(BTree<KEY> **tree, void *key, const RID &rid)
+{
+	const int intKey = *(KEY *)key;
+
+	if (*tree == NULL)
+		this->InitTree(tree);
+
+	(*tree)->InsertEntry(key, rid);
+	this->WriteNodes((*tree)->GetUpdatedNodes());
+	(*tree)->ClearPendingNodes();
+
+	if (DEBUG)
+	{
+		cout << "IX_IndexHandle::InsertEntry - Print tree:" << endl;
+		PrintTree(*tree);
+	}
+}
+
 /* ================== Protected Functions End ================== */
 
 /* ================== Public Functions Begin ================== */
@@ -1400,27 +1410,11 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 	RC rc;
 	if ( _key_type == TypeInt )
 	{
-		const int intKey = *(int *)key;
-		rc = InsertEntry(&this->_int_index, intKey, rid);
-		this->WriteNodes(this->_int_index->GetUpdatedNodes());
-		this->_int_index->ClearPendingNodes();
-		if (DEBUG)
-		{
-			cout << "IX_IndexHandle::InsertEntry - Print int tree:" << endl;
-			PrintTree(this->_int_index);
-		}
+		this->InsertEntry<int>(&(this->_int_index), key, rid);
 	}
 	else if ( _key_type == TypeReal )
 	{
-		const float floatKey = *(float *)key;
-		rc = InsertEntry(&this->_float_index, floatKey, rid);
-		this->WriteNodes(this->_float_index->GetUpdatedNodes());
-		this->_float_index->ClearPendingNodes();
-		if (DEBUG)
-		{
-			cout << "IX_IndexHandle::InsertEntry - Print float tree:" << endl;
-			PrintTree(this->_float_index);
-		}
+		this->InsertEntry<float>(&(this->_float_index), key, rid);
 	}
 	return rc;
 }
