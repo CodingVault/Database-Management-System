@@ -388,8 +388,19 @@ void BTree<KEY>::redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* sib
 		{
 			Node->childrenPageNums.insert(Node->childrenPageNums.begin(),siblingNode->childrenPageNums[i]);
 			Node->children.insert(Node->children.begin(),siblingNode->children[i]);
+			if( siblingNode->children[i] != NULL )
+			{
+			    siblingNode->children[i]->parent = Node;
+			}
 		}
 
+		for( i = 0; i < Node->childrenPageNums.size(); i++)
+		{
+		    if( Node->children[i] != NULL )
+		    {
+		    	Node->children[i]->pos = i;
+		    }
+		}
 		//delete the keys in siblingNode
 		while( siblingNode->keys.size() > even_no )
 		{
@@ -401,6 +412,7 @@ void BTree<KEY>::redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* sib
 			siblingNode->childrenPageNums.erase(siblingNode->childrenPageNums.end());
 			siblingNode->children.erase(siblingNode->children.end());
 		}
+		//cout<<"redistribute with left sibling and the current node has "<<Node->keys.size()<<" keys"<<endl;
 	}
 	else
 	{// right sibling
@@ -424,8 +436,20 @@ void BTree<KEY>::redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* sib
 		{
 			Node->childrenPageNums.push_back(siblingNode->childrenPageNums[i]);
 			Node->children.push_back(siblingNode->children[i]);
+			if( siblingNode->children[i] != NULL)
+			{
+				siblingNode->children[i]->parent = Node;
+			}
 			i++;
 		}
+
+		for( i = 0; i < Node->childrenPageNums.size(); i++)
+		{
+			if( Node->children[i] != NULL )
+			{
+				Node->children[i]->pos = i;
+			}
+	    }
 
 		//delete the keys and children pointers of siblingNode
 		i = 0;
@@ -436,6 +460,7 @@ void BTree<KEY>::redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* sib
 			siblingNode->children.erase(siblingNode->children.begin());
 			i++;
 		}
+		//cout<<"redistribute with right sibling and the current node has "<<Node->keys.size()<<" keys"<<endl;
 	}
 }
 
@@ -446,30 +471,35 @@ void BTree<KEY>::redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* sib
 template <typename KEY>
 void BTree<KEY>::redistribute_LeafNode( BTreeNode<KEY>* Node, BTreeNode<KEY>* siblingNode )
 {
+	//cout<<"======redistribute begins===="<<endl;
     unsigned int i = 0;
     unsigned int even_no = 0;
 	if( Node->pos > siblingNode->pos )
 	{// left sibling
+		//cout<<"the current node has "<<Node->keys.size()<<" items and its left sibling has"<<siblingNode->keys.size()<<endl;
 		even_no = (siblingNode->keys.size() + Node->keys.size())/2;
 		// update the key value of parent
 		Node->parent->keys[siblingNode->pos] = siblingNode->keys[even_no];
-
+        //cout<<"update the separate key in parent"<<endl;
 		// move keys and RIDs from siblingNode to Node
 		for(i = siblingNode->keys.size()-1; i >= even_no; i--)
 		{
 		    Node->keys.insert(Node->keys.begin(),siblingNode->keys[i]);
 		    Node->rids.insert(Node->rids.begin(),siblingNode->rids[i]);
 		}
-
+		//cout<<"move the items of sibling node into the current node"<<endl;
 		//delete the keys and RIDs in siblingNode
 		while(siblingNode->keys.size() > even_no)
 		{
-			siblingNode->keys.erase(siblingNode->keys.end());
-			siblingNode->rids.erase(siblingNode->rids.end());
+			siblingNode->keys.erase(siblingNode->keys.end()-1);
+			siblingNode->rids.erase(siblingNode->rids.end()-1);
+			//cout<<"delete the items of sibling node"<<endl;
 		}
+
 	}
 	else
 	{// right sibling
+		//cout<<"redistribute with right sibling"<<endl;
 		even_no = (siblingNode->keys.size()- Node->keys.size())/2;
 
 		// update the key value of parent
@@ -513,8 +543,8 @@ void BTree<KEY>::merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNo
 	leftNode->rightPageNum = rightNode->rightPageNum;
 
 	//update the parent
-	leftNode->parent->keys[leftNode->pos] = rightNode->keys[ rightNode->keys.size() - 1 ];
-	leftNode->parent->keys[rightNode->pos] = rightNode->keys[ rightNode->keys.size() - 1 ];
+	leftNode->parent->keys[leftNode->pos] = leftNode->parent->keys[rightNode->pos];
+
 }
 
 /*
@@ -538,12 +568,22 @@ void BTree<KEY>::merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightN
     for( i = 0; i < rightNode->childrenPageNums.size(); i++ )
     {
     	leftNode->childrenPageNums.push_back(rightNode->childrenPageNums[i]);
-    	leftNode->children.push_back(rightNode->children[i]);
+    	leftNode->children.push_back( rightNode->children[i] );
+    	if( rightNode->children[i]!=NULL )
+    	{
+    		rightNode->children[i]->parent = leftNode;
+    	}
+    }
+    for( i = 0; i < leftNode->childrenPageNums.size(); i++)
+    {
+    	if( leftNode->children[i] != NULL )
+    	{
+    		leftNode->children[i]->pos = i;
+    	}
     }
 
     //update the parent
-    leftNode->parent->keys[leftNode->pos] = rightNode->keys[ rightNode->keys.size() - 1 ];
-    leftNode->parent->keys[rightNode->pos] = rightNode->keys[ rightNode->keys.size() - 1 ];
+    leftNode->parent->keys[leftNode->pos] = leftNode->parent->keys[rightNode->pos];
 }
 
 /*
@@ -552,9 +592,18 @@ void BTree<KEY>::merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightN
 template <typename KEY>
 RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KEY key, const RID &rid,int& oldchildPos)
 {
-	cout<<"delete in level "<<nodeLevel<<endl;
-	RC rc = 0;
+	//cout<<"delete in level "<<nodeLevel<<endl;
+	//cout<<"this non-leaf node has "<<Node->children.size()<<" children"<<endl;
 	unsigned int i = 0;
+	for( i = 0; i < Node->children.size(); i++ )
+	{
+		if( Node->children[i] != NULL )
+	    {
+			cout<<Node->children[i]->pos<<" || ";
+		}
+
+	}
+	RC rc = 0;
 	BTreeNode<KEY>* childNode = NULL;
 	unsigned keyNum = 0;
 	// find the way to go
@@ -590,7 +639,7 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 
 	if( nodeLevel + 1< this->_height )
 	{// child node is a non-leaf node
-		cout<<"go down to non-leaf level "<< nodeLevel+1<<endl;
+		//cout<<"go down along the position "<<i<<" to non-leaf level "<< nodeLevel+1<<endl;
 		rc = delete_NLeafNode( Node->children[i], nodeLevel+1, key, rid, oldchildPos );
 		if( rc != SUCCESS )
 		{
@@ -599,7 +648,7 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 	}
 	else
 	{// child node is a leaf node
-		cout<<"go down to leaf level "<< nodeLevel+1<<endl;
+		//cout<<"go down along the position "<<i<<" to leaf level "<< nodeLevel+1<<endl;
 		rc = delete_LeafNode( Node->children[i], key, rid, oldchildPos );
 		if( rc != SUCCESS )
 		{
@@ -609,10 +658,14 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 
 	if(oldchildPos == -1)
 	{// usual case, child not deleted
+		//cout<<"return to level "<<nodeLevel<<endl;
+		//cout<<" usual case: child node was not deleted and the node has "<<Node->keys.size()<<" items"<<endl;
 		return SUCCESS;
 	}
+
 	if( nodeLevel == 1 )
 	{// the current node is the root
+        //cout<<"return to level "<<nodeLevel<<endl;
 		keyNum = Node->keys.size();
 		if( keyNum > 1 )
 		{// if the root node has entries to spare
@@ -628,7 +681,22 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 			//remove the childrenPageNum and children pointer
 			Node->childrenPageNums.erase(Node->childrenPageNums.begin() + oldchildPos);
 			Node->children.erase(Node->children.begin() + oldchildPos);
+
+			// update the position of the children of the current node
+			for( i = 0; i < Node->children.size(); i++ )
+			{
+				if( Node->children[i] != NULL )
+				{
+					Node->children[i]->pos = i;
+					//cout<<Node->children[i]->pos<<" || ";
+				}
+
+			}
+			//cout<<endl;
+
 			this->_updated_nodes.push_back(Node);
+			//cout<<"delete in root at position "<<oldchildPos<<endl;
+			//cout<<"the root has "<<Node->children.size()<<" children right now"<<endl;
 			return SUCCESS;
 		}
 		else
@@ -641,29 +709,38 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
             	{
             		childNode = this->_func_ReadNode( Node->childrenPageNums[i],NON_LEAF_NODE );
             	}
+            	else
+            	{
+            		childNode = Node->children[i];
+            	}
 			}
 			else
-			{//child node is a leaf node
+			{// child node is a leaf node
 				if( Node->children[i] == NULL )
 				{
 					childNode = this->_func_ReadNode( Node->childrenPageNums[i],LEAF_NODE );
 				}
+				else
+            	{
+            		childNode = Node->children[i];
+            	}
 			}
 
             //set the new root
-            Node->children[0] = childNode;
-			this->_root = Node->children[0];
-			Node->children[0]->parent = NULL;
+			this->_root = childNode;
+			childNode->parent = NULL;
 
             //TODO: update meta data, since new root is created
 			this->_updated_nodes.push_back(this->_root);// update the new root
 			this->_deleted_nodes.push_back(Node);// delete the old root
 			this->_height--;
+			//cout<<"the height of the tree decreases by 1 and the new root has "<<this->_root->children.size()<<" children"<<endl;
 
 			Node = NULL;
 			return SUCCESS;
 		}
 	}// root node
+
 
 	/**************      non-root node   ********************/
 	if( oldchildPos > 0 )
@@ -677,9 +754,22 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 	Node->childrenPageNums.erase(Node->childrenPageNums.begin() + oldchildPos);
 	Node->children.erase(Node->children.begin() + oldchildPos);
 
+	// update the position of the children of the current node
+	for( i = 0; i < Node->children.size(); i++ )
+	{
+		if( Node->children[i] != NULL )
+		{
+			Node->children[i]->pos = i;
+		}
+	}
+
+	//cout<<"return to the level "<<nodeLevel<<" the node has "<<Node->keys.size()<<" keys"<<endl;
 	if( Node->keys.size() >= this->_order )
 	{// usual case, discard the child node
+		//cout<<"return to level "<<nodeLevel<<endl;
+		//cout<<"delete, usual case"<<endl;
 		this->_updated_nodes.push_back(Node);
+		oldchildPos = -1;
 		return SUCCESS;
 	}
 
@@ -690,11 +780,13 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 	BTreeNode<KEY>* siblingNode = NULL;
 	if( Node->pos < Node->parent->children.size()-1 )
 	{// right sibling, if the node is not at rightmost
+		//cout<<"get the right sibling ";
 		siblingPos = Node->pos + 1;
 		siblingPageNum = Node->parent->childrenPageNums[siblingPos];
 	}
 	else
 	{// left sibling, if the node is at rightmost
+		//cout<<"get the left sibling ";
 		siblingPos = Node->pos - 1;
 		siblingPageNum = Node->parent->childrenPageNums[siblingPos];
 	}
@@ -710,9 +802,11 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 	{
 		siblingNode = Node->parent->children[siblingPos];
 	}
-
+	//cout<<"and this sibling has "<<siblingNode->children.size()<<" children "<<endl;
+	//cout<<"the sibling node has "<<siblingNode->keys.size()<<" items"<<endl;
 	if(siblingNode->keys.size()-1 >= this->_order)
 	{// if the sibling node has extra entries
+		//cout<<"return to the level "<<nodeLevel<<" need to redistribute"<<endl;
 		redistribute_NLeafNode(Node,siblingNode);
 		oldchildPos = -1;
 		this->_updated_nodes.push_back(Node);
@@ -722,13 +816,18 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 	}
 	else
 	{// merge the current node with its sibling node
+		//cout<<"return to the level "<<nodeLevel<<" need to merge"<<endl;
+
 		if( Node->pos < siblingNode->pos)
 		{// right sibling
 			merge_NLeafNode(Node,siblingNode);
+            cout<<"merge into the current non leaf node"<<endl;
 			this->_deleted_nodes.push_back(siblingNode);
 			this->_updated_nodes.push_back(Node);
 			this->_updated_nodes.push_back(Node->parent);
+			//cout<<"after merge, the node has "<<Node->children.size()<<" children"<<endl;
 			oldchildPos = siblingNode->pos;
+			//cout<<"the non leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		}
 		else
 		{
@@ -737,6 +836,11 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 			this->_updated_nodes.push_back(siblingNode);
 			this->_updated_nodes.push_back(Node->parent);
 			oldchildPos = Node->pos;
+			//cout<<"merge into the left sibling node"<<endl;
+			//cout<<siblingNode->children[4]->keys.size()<<endl;
+			//cout<<"after merge, the  node has "<<siblingNode->children.size()<<" items"<<endl;
+			//cout<<"XXXXXXXXXX"<<siblingNode->children[siblingNode->children.size()-2]->keys.size()<<endl;
+			//cout<<"the non leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		}
 		return SUCCESS;
 	}
@@ -745,7 +849,8 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 template <typename KEY>
 RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos)
 {
-	cout<<"delete in leaf node"<<endl;
+	//cout<<"delete in leaf node"<<endl;
+	//cout<<"this leaf node has "<<Node->keys.size()<<" items"<<endl;
 	unsigned i = 0;
 	unsigned keysNum = 0;
 	if(this->_height == 1)
@@ -781,7 +886,8 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 			if( key == Node->keys[0] && Node->rids[0].pageNum ==  rid.pageNum
 									&& Node->rids[0].slotNum == rid.slotNum )
 			{
-				this->_root = NULL;
+				//cout<<"The B tree now is empty!"<<endl;
+				//this->_root = NULL;
 				this->_deleted_nodes.push_back(Node);
 				return SUCCESS;
 			}
@@ -792,6 +898,7 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 		}
 		else
 		{// empty tree
+			//cout<<"The tree is empty, can not be deleted"<<endl;
 			return RECORD_NOT_FOUND;
 		}
 
@@ -803,6 +910,7 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 		if( key == Node->keys[i] && Node->rids[i].pageNum ==  rid.pageNum
 				&& Node->rids[i].slotNum == rid.slotNum )
 		{
+			//cout<<"find the key in the leaf node at position "<<Node->pos<<endl;
 			Node->keys.erase(Node->keys.begin()+i);
 			Node->rids.erase(Node->rids.begin()+i);
 			break;
@@ -810,43 +918,49 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 	}
     if( i == keysNum )
 	{
+    	//cout<<"can not find the entry in the leaf node, deletion fails!"<<endl;
     	return RECORD_NOT_FOUND;
 	}
 
 	if( keysNum -1 >= this->_order )
 	{// usual case, delete the child node
-		cout<<"delete the key normally!"<<endl;
+		//cout<<"delete the key normally!"<<endl;
+		//cout<<"now the leaf node has "<<Node->keys.size()<<" items"<<endl;
 		oldchildPos = -1;
 		this->_updated_nodes.push_back(Node);
 		return SUCCESS;
 	}
 
-    cout<<"can't delete the key normally!"<<endl;
+    //cout<<"can't delete the key normally!"<<endl;
 	// the node hasn't enough items to spare
 	//get a sibling node
 	unsigned siblingPos = 0;
     int siblingPageNum = 0;
 	BTreeNode<KEY>* siblingNode = NULL;
-	cout<<"the number of children is "<<Node->parent->children.size()<<endl;
 	if( Node->pos < Node->parent->children.size()-1 )
 	{// get the right sibling, if the node is not at rightmost
-		cout<<"get the right sibling"<<endl;
+
 		siblingPos = Node->pos + 1;
 		siblingPageNum = Node->parent->childrenPageNums[siblingPos];
 	}
 	else
 	{// get the left sibling, if the node is at rightmost
-		cout<<"get the left sibling in position "<<(Node->pos - 1)<<endl;
+
 		siblingPos = Node->pos - 1;
 		siblingPageNum = Node->parent->childrenPageNums[siblingPos];
 	}
+
 	if( Node->parent->children[siblingPos] == NULL)
 	{// if the sibling is not in memory, fetch it from disk
-		cout<<"fetch the sibling from disk"<<endl;
-		this->_func_ReadNode(siblingPageNum,LEAF_NODE);
+
+		siblingNode = this->_func_ReadNode(siblingPageNum,LEAF_NODE);
 		siblingNode->parent = Node->parent;
 		siblingNode->pos = siblingPos;
 		Node->parent->children[siblingPos] = siblingNode;
+	}
+	else
+	{
+		siblingNode = Node->parent->children[siblingPos];
 	}
 
 	if( Node->pos < Node->parent->children.size()-1 )
@@ -860,10 +974,12 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 		siblingNode->right = Node;
 	}
 
+
     if(siblingNode->keys.size() > this->_order)
 	{// if the sibling node has extra entries
-    	cout<<"delete the key , need to redistribute!"<<endl;
+    	//cout<<"need to redistribute the leaf node with its sibling in position "<<siblingNode->pos<<endl;
 	    redistribute_LeafNode(Node,siblingNode);
+	    //cout<<"redistribute successfully"<<endl;
 	    oldchildPos = -1;
 		this->_updated_nodes.push_back(Node);
 		this->_updated_nodes.push_back(siblingNode);
@@ -874,25 +990,31 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 	{// if the sibling node hasn't extra entries, merge the current node with its sibling node
 		if( Node->pos < siblingNode->pos)
 		{// right sibling
-			cout<<"delete the key , need to merge two leaf nodes!"<<endl;
+			//cout<<"need to merge leaf nodes with its right sibling!"<<endl;
 			merge_LeafNode(Node,siblingNode);
+			//cout<<"after merge, the leaf node has "<<Node->keys.size()<<" items"<<endl;
 			this->_deleted_nodes.push_back(siblingNode);
 			this->_updated_nodes.push_back(Node);
 			this->_updated_nodes.push_back(Node->parent);
 			oldchildPos = siblingNode->pos;
+			//cout<<"the leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		}
 		else
 		{// left sibling
+			//cout<<"need to merge leaf nodes with its left sibling!"<<endl;
 			merge_LeafNode(siblingNode,Node);
+			cout<<"after merge, the leaf node has "<<siblingNode->keys.size()<<" items"<<endl;
 			this->_deleted_nodes.push_back(Node);
 			this->_updated_nodes.push_back(siblingNode);
 			this->_updated_nodes.push_back(Node->parent);
 			oldchildPos = Node->pos;
+			//cout<<"the leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		}
 		return SUCCESS;
 	}
 
 }
+
 
 /* ================== Protected Functions End ================== */
 
@@ -996,7 +1118,7 @@ template <typename KEY>
 RC BTree<KEY>::DeleteEntry(const KEY key, const RID &rid)
 {
 	int oldchildPos = -1;
-	cout<<"the height of the tree is: "<<this->_height<<endl;
+	//cout<<"the height of the tree is: "<<this->_height<<endl;
 	if(this->_root->type == LEAF_NODE)
 	{
 		return delete_LeafNode(this->_root,key,rid,oldchildPos);
@@ -1033,6 +1155,7 @@ RC BTree<KEY>::DeleteTree(BTreeNode<KEY> *Node)
 
 	return SUCCESS;
 }
+
 
 template <typename KEY>
 vector<BTreeNode<KEY>*> BTree<KEY>::GetUpdatedNodes() const
@@ -1437,13 +1560,22 @@ RC IX_IndexHandle::InsertEntry(BTree<KEY> **tree, void *key, const RID &rid)
 	return rc;
 }
 
+template <typename KEY>
+RC IX_IndexHandle::DeleteEntry(BTree<KEY> **tree, const KEY key, const RID &rid)
+{
+	if (*tree == NULL)
+		this->InitTree(tree);
+
+	return (*tree)->DeleteEntry(key, rid);
+}
+
 /* ================== Protected Functions End ================== */
 
 /* ================== Public Functions Begin ================== */
 
 RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 {
-	RC rc;
+	RC rc = SUCCESS;
 	if ( _key_type == TypeInt )
 	{
 		this->InsertEntry(&(this->_int_index), key, rid);
@@ -1461,18 +1593,117 @@ RC IX_IndexHandle::DeleteEntry(void *key, const RID &rid)
     if ( _key_type == TypeInt )
 	{
 			const int intKey = *(int *)key;
-			rc = this->_int_index->DeleteEntry(intKey,rid);
+			rc = DeleteEntry(&this->_int_index, intKey, rid);
 			this->WriteNodes(this->_int_index->GetUpdatedNodes());
 			this->_int_index->ClearPendingNodes();
 	}
 	else if ( _key_type == TypeReal )
 	{
 		const float floatKey = *(float *)key;
-		rc = this->_float_index->DeleteEntry(floatKey,rid);
+		rc = DeleteEntry(&this->_float_index, floatKey, rid);
 		this->WriteNodes(this->_float_index->GetUpdatedNodes());
 		this->_float_index->ClearPendingNodes();
 	}
     return rc;
+
+}
+
+template <typename KEY>
+RC IX_IndexHandle::SearchEntry(const KEY key, unsigned& pageNum, unsigned &pos)
+{
+	RC rc;
+    if ( _key_type == TypeInt )
+	{
+    	const int intKey = key;
+    	BTreeNode<int> *leafNode_int = NULL;
+    	rc = this->_int_index->SearchEntry(intKey,&leafNode_int,pos);
+    	pageNum = leafNode_int->pageNum;
+        delete leafNode_int;
+    	leafNode_int = NULL;
+	}
+	else if ( _key_type == TypeReal )
+	{
+		const float floatKey = key;
+		BTreeNode<float> *leafNode_float = NULL;
+		rc = this->_float_index->SearchEntry(floatKey,&leafNode_float,pos);
+		pageNum = leafNode_float->pageNum;
+		delete leafNode_float;
+		leafNode_float = NULL;
+	}
+    return rc;
+}
+
+template <typename KEY>
+RC IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType nodeType,BTreeNode<KEY> **Node)const
+{
+	const unsigned KEY_LENGTH = 4;
+	const unsigned RID_LENGTH = 8;
+	const unsigned PAGE_NUM_LENGTH = 4;
+
+	void *page = malloc(PF_PAGE_SIZE);
+	this->_pf_handle->ReadPage(pageNum, page);
+	unsigned offset = 0;
+
+	unsigned nodeNum = 0;
+	memcpy(&nodeNum, page, 4);
+	offset += 4;
+	cout << "IX_IndexHandle::ReadNode - Reading " << nodeNum << " key(s) from page " << pageNum << " as type " << nodeType << "." << endl;
+
+	BTreeNode<KEY> *node = new BTreeNode<KEY>;
+	node->pageNum = pageNum;
+	node->type = nodeType;
+	node->parent = NULL;
+	node->left = NULL;
+	node->right = NULL;
+	node->pos = 0;
+	if (nodeType == NodeType(1))	// read leaf node
+	{
+		// read double direction links
+		memcpy(&node->leftPageNum, (char *)page + offset, 4);
+		offset += 4;
+		memcpy(&node->rightPageNum, (char *)page + offset, 4);
+		offset += 4;
+
+		// read key and rid pairs
+		for (unsigned index = 0; index < nodeNum; index++)
+		{
+			KEY key;
+			RID rid;
+			memcpy(&key, (char *)page + offset, KEY_LENGTH);
+			offset += KEY_LENGTH;
+			memcpy(&rid, (char *)page + offset, RID_LENGTH);
+			offset += RID_LENGTH;
+
+			node->keys.push_back(key);
+			node->rids.push_back(rid);
+		}
+	}
+	else	// read non-leaf node
+	{
+		// read leftmost child page number
+		unsigned childPageNum = 0;
+		memcpy(&childPageNum, (char *)page + offset, PAGE_NUM_LENGTH);
+		offset += PAGE_NUM_LENGTH;
+		node->childrenPageNums.push_back(childPageNum);
+
+		// read keys and other children page numbers
+		for (unsigned index = 0; index < nodeNum; index++)
+		{
+			KEY key;
+			memcpy(&key, (char *)page + offset, KEY_LENGTH);
+			offset += KEY_LENGTH;
+			memcpy(&childPageNum, (char *)page + offset, PAGE_NUM_LENGTH);
+			offset += PAGE_NUM_LENGTH;
+
+			node->keys.push_back(key);
+			node->childrenPageNums.push_back(childPageNum);
+			node->children.push_back(NULL);
+		}
+	}
+    free(page);
+    *Node = node;
+    node = NULL;
+	return SUCCESS;
 
 }
 
@@ -1530,80 +1761,108 @@ AttrType IX_IndexHandle::GetKeyType() const
 /********************* IX_IndexHandle End *********************/
 
 /********************* IX_IndexScan Start *********************/
-
 IX_IndexScan::IX_IndexScan()
 {
+	this->indexHandle = NULL;
 }
 
 IX_IndexScan::~IX_IndexScan()
 {
+	this->indexHandle = NULL;
+}
+
+RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle, // Initialize index scan
+	      CompOp      compOp,
+	      void        *value)
+{
+	AttrType keyType = indexHandle.GetKeyType();
+	this->type = keyType;
+	this->compOp = compOp;
+	*(this->indexHandle) = indexHandle;
+	if( keyType == TypeReal )
+	{
+		memcpy(keyValue,value,4);
+		return this->open_scan<float>( indexHandle,compOp,value );
+	}
+	else if( keyType == TypeInt )
+	{
+		memcpy(keyValue,value,4);
+		return this->open_scan<int>( indexHandle,compOp,value );
+	}
+	return INVALID_OPERATION;
 }
 
 /*
  * Initialize index scan
  */
 template <typename KEY>
-RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
+RC IX_IndexScan::open_scan(const IX_IndexHandle &indexHandle,
 	      CompOp      compOp,
 	      void        *value)
 {
+	RC rc = 0;
 	BTreeNode<KEY>* Node = NULL;
-	Functor<IX_IndexHandle, KEY> _func_ReadNode(indexHandle);
-	AttrType keyType = indexHandle.GetKeyType();
-	if( keyType == TypeReal )
-	{
-		memcpy(keyValue,value,4);
-		this->floatNode = new BTreeNode<float>;
-	}
-	else if( keyType == TypeInt )
-	{
-		memcpy(keyValue,value,4);
-		this->intNode = new BTreeNode<int>;
-	}
 
-	this->type = keyType;
-	this->currentIndex = -1; // set the current index
-	this->compOp = compOp;
+	// read the meta data
 	int height = 0;
 	unsigned pageNum = 0;
-
-
-	// fetch meta data
 	char memory_page[PF_PAGE_SIZE] = "\0";
-	PF_FileHandle* filehandle =  indexHandle.GetFileHandle();
+	PF_FileHandle* filehandle =  this->indexHandle->GetFileHandle();
 	if(filehandle->ReadPage(0,memory_page))
 	{
 		return FILE_OP_ERROR;
 	}
-	pageNum = *(unsigned int*)( memory_page ); // the page number of the root
-	height = *(int*)( memory_page + 4 );
 
+	pageNum = *(unsigned int*)( memory_page ); // get the page number of the root
+	height = *(int*)( memory_page + 4 ); // get the height of the B Tree
+
+	// read the leftmost node
 	for( int i = 0; i < height - 1; i++ )
 	{
-		Node = _func_ReadNode(pageNum,NON_LEAF_NODE);
+		rc = this->indexHandle->ReadNode( pageNum, NON_LEAF_NODE, &Node);
+		if(rc)
+		{
+			return rc;
+		}
 		pageNum = Node->childrenPageNums[0];
+		delete Node;
 	}
-	//fetch the leaf page
-	Node = _func_ReadNode(pageNum,LEAF_NODE);
-
-	if(  keyType == TypeReal )
-	{
-		memcpy(keyValue,value,4);
-		this->floatNode = Node;
-	}
-	else if( keyType == TypeInt )
-	{
-		memcpy(keyValue,value,4);
-		this->intNode = Node;
+	rc = this->indexHandle->ReadNode(pageNum,LEAF_NODE,&Node);
+	if(rc)
+    {
+		return rc;
 	}
 
+	//set the search value
+	if(  this->type == TypeReal )
+	{
+		memcpy(this->nextSearchValue,&(Node->keys[0]),4);
+		search_rid.pageNum = Node->rids[0].pageNum;
+		search_rid.slotNum = Node->rids[0].slotNum;
+	}
+	else if( this->type== TypeInt )
+	{
+		memcpy(this->nextSearchValue,&(Node->keys[0]),4);
+		search_rid.pageNum = Node->rids[0].pageNum;
+		search_rid.slotNum = Node->rids[0].slotNum;
+	}
+
+	delete Node;
 	Node = NULL;
-
 	return SUCCESS;
 }
 
 RC IX_IndexScan::GetNextEntry(RID &rid) // Get next matching entry
 {
+	if(this->type == TypeInt)
+	{
+		this->get_next_entry<int>(rid);
+
+	}
+	else if(this->type == TypeReal)
+	{
+		this->get_next_entry<float>(rid);
+	}
 	return SUCCESS;
 }
 
@@ -1613,42 +1872,72 @@ RC IX_IndexScan::GetNextEntry(RID &rid) // Get next matching entry
 template <typename KEY>
 RC IX_IndexScan::get_next_entry(RID &rid)
 {
+	unsigned i = 0;
+	unsigned position = 0;
 	char currentValue[PF_PAGE_SIZE] = {"\0"};
-	BTreeNode<KEY>* leafNode = NULL;
-	Functor<IX_IndexHandle, KEY> _func_ReadNode(this->indexHandle);
-    if(this->type == TypeInt)
-    {
-    	leafNode = this->intNode;
-    }
-    else
-    {
-    	leafNode = this->floatNode;
-    }
-	while(this->currentIndex + 1 < leafNode->keys.size())
+	KEY searchKey;
+	unsigned value_length = 0;
+	unsigned pageNum = 0;
+	BTreeNode<KEY>* Node = NULL;
+	RC rc = 0;
+
+	if(this->type == TypeInt)
 	{
-		currentIndex++;
-		memcpy(currentValue,leafNode->keys[currentIndex],4);
-		if(compare(currentValue, compOp, keyValue, this->type))
+		searchKey = *(int*)(this->nextSearchValue);
+		value_length = 4;
+		rc = this->indexHandle->SearchEntry(searchKey,pageNum,position);
+		if( rc )
 		{
-			rid.pageNum = leafNode->rids[currentIndex].pageNum;
-			rid.slotNum = leafNode->rids[currentIndex].slotNum;
-			return SUCCESS;
+			return rc;
+		}
+	}
+	else if(this->type == TypeReal)
+	{
+		searchKey = *(float*)(this->nextSearchValue);
+		value_length = 4;
+		rc = this->indexHandle->SearchEntry(searchKey,pageNum,position);
+		if( rc )
+		{
+			return rc;
 		}
 	}
 
-	if( leafNode->rightPageNum == -1 )
-	{// reach the rightmost page
-		delete leafNode;
-		return RECORD_NOT_FOUND;
+	rc = this->indexHandle->ReadNode(pageNum,LEAF_NODE,&Node);
+	if( rc )
+	{
+		return rc;
 	}
 
-	// fetch the new leaf page
-	delete leafNode;
-    leafNode = _func_ReadNode.ReadNode(leafNode->rightPageNum,LEAF_NODE);
-    currentIndex = 0;
-	rid.pageNum = leafNode->rids[currentIndex].pageNum;
-	rid.slotNum = leafNode->rids[currentIndex].slotNum;
-	return SUCCESS;
+	do
+	{
+	    for(i = position; i < Node->keys.size(); i++)
+	    {
+	    	if(Node->rids[i].pageNum == this->search_rid.pageNum &&
+	    			Node->rids[i].slotNum == this->search_rid.slotNum)
+	    	{
+	    		continue;
+	    	}
+		    memcpy(currentValue,&(Node->keys[i]),value_length);
+		    if(compare(currentValue, compOp, keyValue, this->type))
+		    {
+			    rid.pageNum = Node->rids[i].pageNum;
+			    rid.slotNum = Node->rids[i].slotNum;
+			    memcpy(this->nextSearchValue,currentValue,value_length);
+			    search_rid.pageNum = rid.pageNum;
+			    search_rid.slotNum = rid.slotNum;
+			    return SUCCESS;
+		    }
+	    }
+	    if( Node->rightPageNum == -1 )
+	    {// reach the rightmost page
+	    	delete Node;
+	    	return RECORD_NOT_FOUND;
+	    }
+	    // fetch the new leaf page
+	    delete Node;
+	    this->indexHandle->ReadNode(Node->rightPageNum,LEAF_NODE,&Node);
+	}while(Node->rightPageNum != -1);
+	return INVALID_OPERATION;
 }
 
 /*
@@ -1656,8 +1945,7 @@ RC IX_IndexScan::get_next_entry(RID &rid)
  */
 RC IX_IndexScan::CloseScan()
 {
-	this->floatNode = NULL;
-	this->intNode = NULL;
+	this->indexHandle = NULL;
 	return SUCCESS;
 }
 

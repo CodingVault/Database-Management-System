@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+#include <typeinfo>
 
 #include "../pf/pf.h"
 #include "../rm/rm.h"
@@ -96,11 +97,11 @@ protected:
 	RC delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KEY key, const RID &rid,int& oldchildPos);
 	RC delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos);
 
-	void redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+    void redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
 	void redistribute_LeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
 
-    void merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
-	void merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
+	void merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
+    void merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
 
 private:
 	void InitRootNode(const NodeType nodeType);
@@ -154,6 +155,10 @@ class IX_IndexHandle {
   //     For varchar: use 4 bytes to store the length of characters, then store the actual characters.
   RC InsertEntry(void *key, const RID &rid);  // Insert new index entry
   RC DeleteEntry(void *key, const RID &rid);  // Delete index entry
+  template <typename KEY>
+  RC SearchEntry(const KEY key,  unsigned &pageNum, unsigned &pos);
+  template <typename KEY>
+  RC ReadNode(const unsigned pageNum, const NodeType nodeType,BTreeNode<KEY> **Node)const;
 
   RC Open(PF_FileHandle *handle, AttrType keyType);
   RC Close();
@@ -174,6 +179,8 @@ class IX_IndexHandle {
  private:
   template <typename KEY>
   RC InsertEntry(BTree<KEY> **tree, void *key, const RID &rid);
+  template <typename KEY>
+  RC DeleteEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
 
  private:
   PF_FileHandle *_pf_handle;
@@ -204,18 +211,17 @@ class IX_IndexScan {
   template <typename KEY>
   RC get_next_entry(RID &rid);
   template <typename KEY>
-  RC OpenScan(const IX_IndexHandle &indexHandle,
-  	      CompOp      compOp,
-  	      void        *value);
+  RC open_scan(const IX_IndexHandle &indexHandle,
+		  CompOp      compOp,
+    	  void        *value);
 
  private:
-  BTreeNode<int> *intNode;
-  BTreeNode<float> *floatNode;
   char keyValue[PF_PAGE_SIZE];
-  int currentIndex;
   CompOp compOp;
   AttrType type;
-  IX_IndexHandle indexHandle;
+  IX_IndexHandle* indexHandle;
+  char nextSearchValue[PF_PAGE_SIZE];
+  RID search_rid;
 };
 
 // print out the error message for a given return code
