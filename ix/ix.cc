@@ -1410,11 +1410,11 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 	RC rc;
 	if ( _key_type == TypeInt )
 	{
-		this->InsertEntry<int>(&(this->_int_index), key, rid);
+		this->InsertEntry(&(this->_int_index), key, rid);
 	}
 	else if ( _key_type == TypeReal )
 	{
-		this->InsertEntry<float>(&(this->_float_index), key, rid);
+		this->InsertEntry(&(this->_float_index), key, rid);
 	}
 	return rc;
 }
