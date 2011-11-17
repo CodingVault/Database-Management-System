@@ -847,48 +847,43 @@ RC BTree<KEY>::delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const K
 }
 
 template <typename KEY>
-RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos)
+RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* leafNode, const KEY key,const RID &rid, int& oldchildPos)
 {
 	//cout<<"delete in leaf node"<<endl;
 	//cout<<"this leaf node has "<<Node->keys.size()<<" items"<<endl;
 	unsigned i = 0;
-	unsigned keysNum = 0;
-	if(this->_height == 1)
+	unsigned keysNum = leafNode->keys.size();;
+	if (this->_height == 1)
 	{// the root is a leaf
-		keysNum = Node->keys.size();
-		if( keysNum > 1 )
+		if (keysNum > 1)
 		{// the root has more than one entry
-			for( i = 0; i < keysNum; i++ )
+			for (i = 0; i < keysNum; i++)
 			{
-				if( key == Node->keys[i] && (Node->rids[i]).pageNum ==  rid.pageNum
-						&& Node->rids[i].slotNum == rid.slotNum )
+				if (key == leafNode->keys[i] && (leafNode->rids[i]).pageNum == rid.pageNum
+						&& leafNode->rids[i].slotNum == rid.slotNum)
 				{// find the entry
-					Node->keys.erase(Node->keys.begin()+i);
-					Node->rids.erase(Node->rids.begin()+i);
-					break;
+					leafNode->keys.erase(leafNode->keys.begin() + i);
+					leafNode->rids.erase(leafNode->rids.begin() + i);
+
+					oldchildPos = -1;
+					this->_updated_nodes.push_back(leafNode);
+					return SUCCESS;
 				}
 			}
 
-			if(i == keysNum )
+			if (i == keysNum)
 			{
 				return RECORD_NOT_FOUND;
 			}
-			else
-			{
-				oldchildPos = -1;
-				this->_updated_nodes.push_back(Node);
-				return SUCCESS;
-			}
-
 		}
-		else if(keysNum == 1)
+		else if (keysNum == 1)
 		{// the tree becomes empty
-			if( key == Node->keys[0] && Node->rids[0].pageNum ==  rid.pageNum
-									&& Node->rids[0].slotNum == rid.slotNum )
+			if ( key == leafNode->keys[0] && leafNode->rids[0].pageNum == rid.pageNum
+					&& leafNode->rids[0].slotNum == rid.slotNum )
 			{
 				//cout<<"The B tree now is empty!"<<endl;
 				//this->_root = NULL;
-				this->_deleted_nodes.push_back(Node);
+				this->_deleted_nodes.push_back(leafNode);
 				return SUCCESS;
 			}
 			else
@@ -897,122 +892,102 @@ RC BTree<KEY>::delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &ri
 			}
 		}
 		else
-		{// empty tree
-			//cout<<"The tree is empty, can not be deleted"<<endl;
-			return RECORD_NOT_FOUND;
+		{
+			// !!! if running to here, the code must have something wrong
 		}
-
 	}
 
-	keysNum = Node->keys.size();
-	for( i = 0; i < keysNum; i++ )
+	for (i = 0; i < keysNum; i++)
 	{
-		if( key == Node->keys[i] && Node->rids[i].pageNum ==  rid.pageNum
-				&& Node->rids[i].slotNum == rid.slotNum )
+		if (key == leafNode->keys[i] && leafNode->rids[i].pageNum == rid.pageNum
+				&& leafNode->rids[i].slotNum == rid.slotNum)
 		{
 			//cout<<"find the key in the leaf node at position "<<Node->pos<<endl;
-			Node->keys.erase(Node->keys.begin()+i);
-			Node->rids.erase(Node->rids.begin()+i);
-			break;
+			leafNode->keys.erase(leafNode->keys.begin() + i);
+			leafNode->rids.erase(leafNode->rids.begin() + i);
+
+			if (keysNum > this->_order)
+			{// usual case, delete the child node
+				//cout<<"delete the key normally!"<<endl;
+				//cout<<"now the leaf node has "<<Node->keys.size()<<" items"<<endl;
+				oldchildPos = -1;
+				this->_updated_nodes.push_back(leafNode);
+				return SUCCESS;
+			}
 		}
 	}
-    if( i == keysNum )
+    if(i == keysNum)
 	{
     	//cout<<"can not find the entry in the leaf node, deletion fails!"<<endl;
     	return RECORD_NOT_FOUND;
-	}
-
-	if( keysNum -1 >= this->_order )
-	{// usual case, delete the child node
-		//cout<<"delete the key normally!"<<endl;
-		//cout<<"now the leaf node has "<<Node->keys.size()<<" items"<<endl;
-		oldchildPos = -1;
-		this->_updated_nodes.push_back(Node);
-		return SUCCESS;
 	}
 
     //cout<<"can't delete the key normally!"<<endl;
 	// the node hasn't enough items to spare
 	//get a sibling node
 	unsigned siblingPos = 0;
-    int siblingPageNum = 0;
 	BTreeNode<KEY>* siblingNode = NULL;
-	if( Node->pos < Node->parent->children.size()-1 )
+	if (leafNode->pos < leafNode->parent->children.size() - 1)
 	{// get the right sibling, if the node is not at rightmost
-
-		siblingPos = Node->pos + 1;
-		siblingPageNum = Node->parent->childrenPageNums[siblingPos];
+		siblingPos = leafNode->pos + 1;
 	}
 	else
 	{// get the left sibling, if the node is at rightmost
-
-		siblingPos = Node->pos - 1;
-		siblingPageNum = Node->parent->childrenPageNums[siblingPos];
+		siblingPos = leafNode->pos - 1;
 	}
 
-	if( Node->parent->children[siblingPos] == NULL)
+	if (leafNode->parent->children[siblingPos] == NULL)
 	{// if the sibling is not in memory, fetch it from disk
+		int siblingPageNum = leafNode->parent->childrenPageNums[siblingPos];
+		leafNode->parent->children[siblingPos] = this->_func_ReadNode(siblingPageNum, LEAF_NODE);
+		leafNode->parent->children[siblingPos]->parent = leafNode->parent;
+		leafNode->parent->children[siblingPos]->pos = siblingPos;
 
-		siblingNode = this->_func_ReadNode(siblingPageNum,LEAF_NODE);
-		siblingNode->parent = Node->parent;
-		siblingNode->pos = siblingPos;
-		Node->parent->children[siblingPos] = siblingNode;
+		if (leafNode->pos < leafNode->parent->children.size() - 1)
+		{// the node is not at rightmost,right sibling
+			leafNode->right = leafNode->parent->children[siblingPos];
+			leafNode->parent->children[siblingPos]->left = leafNode;
+		}
+		else
+		{// the node is at rightmost,left sibling
+			leafNode->left = leafNode->parent->children[siblingPos];
+			leafNode->parent->children[siblingPos]->right = leafNode;
+		}
 	}
-	else
-	{
-		siblingNode = Node->parent->children[siblingPos];
-	}
+	siblingNode = leafNode->parent->children[siblingPos];
 
-	if( Node->pos < Node->parent->children.size()-1 )
-	{// the node is not at rightmost,right sibling
-		Node->right = siblingNode;
-		siblingNode->left = Node;
-	}
-	else
-	{// the node is at rightmost,left sibling
-		Node->left = siblingNode;
-		siblingNode->right = Node;
-	}
-
-
-    if(siblingNode->keys.size() > this->_order)
+    if (siblingNode->keys.size() > this->_order)
 	{// if the sibling node has extra entries
     	//cout<<"need to redistribute the leaf node with its sibling in position "<<siblingNode->pos<<endl;
-	    redistribute_LeafNode(Node,siblingNode);
+	    redistribute_LeafNode(leafNode, siblingNode);
 	    //cout<<"redistribute successfully"<<endl;
 	    oldchildPos = -1;
-		this->_updated_nodes.push_back(Node);
-		this->_updated_nodes.push_back(siblingNode);
-		this->_updated_nodes.push_back(Node->parent);
-		return SUCCESS;
 	}
 	else
 	{// if the sibling node hasn't extra entries, merge the current node with its sibling node
-		if( Node->pos < siblingNode->pos)
+		if (leafNode->pos < siblingNode->pos)
 		{// right sibling
 			//cout<<"need to merge leaf nodes with its right sibling!"<<endl;
-			merge_LeafNode(Node,siblingNode);
+			merge_LeafNode(leafNode,siblingNode);
 			//cout<<"after merge, the leaf node has "<<Node->keys.size()<<" items"<<endl;
-			this->_deleted_nodes.push_back(siblingNode);
-			this->_updated_nodes.push_back(Node);
-			this->_updated_nodes.push_back(Node->parent);
 			oldchildPos = siblingNode->pos;
 			//cout<<"the leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		}
 		else
 		{// left sibling
 			//cout<<"need to merge leaf nodes with its left sibling!"<<endl;
-			merge_LeafNode(siblingNode,Node);
-			cout<<"after merge, the leaf node has "<<siblingNode->keys.size()<<" items"<<endl;
-			this->_deleted_nodes.push_back(Node);
-			this->_updated_nodes.push_back(siblingNode);
-			this->_updated_nodes.push_back(Node->parent);
-			oldchildPos = Node->pos;
+			merge_LeafNode(siblingNode,leafNode);
+			//cout<<"after merge, the leaf node has "<<siblingNode->keys.size()<<" items"<<endl;
+			oldchildPos = leafNode->pos;
 			//cout<<"the leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		}
-		return SUCCESS;
 	}
 
+	this->_deleted_nodes.push_back(siblingNode);
+	this->_updated_nodes.push_back(leafNode);
+	this->_updated_nodes.push_back(leafNode->parent);
+
+	return SUCCESS;
 }
 
 

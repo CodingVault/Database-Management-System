@@ -178,7 +178,7 @@ class IX_IndexHandle {
 
  private:
   template <typename KEY>
-  RC InsertEntry(BTree<KEY> **tree, void *key, const RID &rid);
+  RC InsertEntry(BTree<KEY> **tree, void *key, const RID &rid);	// TODO: const key?
   template <typename KEY>
   RC DeleteEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
 
