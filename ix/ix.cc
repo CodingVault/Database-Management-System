@@ -11,10 +11,51 @@ PF_Manager* IX_Manager::_pf_manager = 0;
 
 /**************************************/
 
-bool Exist(const string fileName)
+RC GetAttrType(const string tableName, const string attributeName, AttrType &attrType)
 {
-	// TODO: Implementation!
-	return true;
+	const string condAttr = "attrs_name";
+	const string projAttr = "data_type";
+
+	RM *rm = RM::Instance();
+	RM_ScanIterator rmsi;
+    vector<string> attributes;
+    attributes.push_back(projAttr);
+    rm->scan(tableName, condAttr, CompOp(0), attributeName.c_str(), attributes, rmsi);
+
+    RID rid;
+    void *data_returned = malloc(10);
+    if (rmsi.getNextTuple(rid, data_returned) == RM_EOF)
+    {
+        free(data_returned);
+        rmsi.close();
+    	IX_PrintError(ATTRIBUTE_NOT_FOUND);
+    	return ATTRIBUTE_NOT_FOUND;
+    }
+
+    unsigned typeId = *(int *)data_returned;
+    attrType = AttrType(typeId);
+    free(data_returned);
+    rmsi.close();
+
+	return SUCCESS;
+}
+
+RC WriteMetadata(PF_FileHandle &handle, const unsigned rootPageNum,
+		const unsigned height, const unsigned freepageNum, const AttrType attrType)
+{
+	void *page = malloc(PF_PAGE_SIZE);
+	memcpy(page, &rootPageNum, 4);
+	memcpy((char *)page + 4, &height, 4);
+	memcpy((char *)page + 4, &attrType, 4);
+	RC rc = handle.WritePage(0, page);
+	free(page);
+
+	if (rc != SUCCESS)
+	{
+		IX_PrintError(FILE_OP_ERROR);
+		return FILE_OP_ERROR;
+	}
+	return SUCCESS;
 }
 
 template <typename KEY>
@@ -1035,6 +1076,11 @@ IX_Manager::IX_Manager()
 	_pf_manager = PF_Manager::Instance();
 }
 
+IX_Manager::~IX_Manager()
+{
+	IX_Manager::_ix_manager = 0;
+}
+
 IX_Manager* IX_Manager::Instance()
 {
 	if (!_ix_manager)
@@ -1045,16 +1091,24 @@ IX_Manager* IX_Manager::Instance()
 RC IX_Manager::CreateIndex(const string tableName,       // create new index
 		 const string attributeName)
 {
-	const string fileName = IX_FILE_NAME(tableName, attributeName);
-	if (!Exist(fileName))
+	AttrType attrType;
+	if (GetAttrType(tableName, attributeName, attrType) != SUCCESS)
 	{
-		IX_PrintError(INVALID_OPERATION);
-		return INVALID_OPERATION;
+		IX_PrintError(CREATE_INDEX_ERROR);
+		return CREATE_INDEX_ERROR;
 	}
+
+	string fileName = IX_FILE_NAME(tableName, attributeName);
 	if (_pf_manager->CreateFile(fileName.c_str()) != SUCCESS)
 	{
-		IX_PrintError(FILE_OP_ERROR);
-		return FILE_OP_ERROR;
+		IX_PrintError(CREATE_INDEX_ERROR);
+		return CREATE_INDEX_ERROR;
+	}
+
+	if (this->InitIndexFile(fileName, attrType) != SUCCESS)
+	{
+		IX_PrintError(CREATE_INDEX_ERROR);
+		return CREATE_INDEX_ERROR;
 	}
 
 	return SUCCESS;
@@ -1065,8 +1119,8 @@ RC IX_Manager::DestroyIndex(const string tableName,      // destroy an index
 {
 	if (_pf_manager->DestroyFile(IX_FILE_NAME(tableName, attributeName).c_str()) != SUCCESS)
 	{
-		IX_PrintError(FILE_OP_ERROR);
-		return FILE_OP_ERROR;
+		IX_PrintError(DESTROY_INDEX_ERROR);
+		return DESTROY_INDEX_ERROR;
 	}
 	return SUCCESS;
 }
@@ -1078,39 +1132,9 @@ RC IX_Manager::OpenIndex(const string tableName,         // open an index
 	PF_FileHandle *handle = new PF_FileHandle;
 	if (_pf_manager->OpenFile(IX_FILE_NAME(tableName, attributeName).c_str(), *handle) != SUCCESS)
 	{
-		IX_PrintError(FILE_OP_ERROR);
-		return FILE_OP_ERROR;
+		IX_PrintError(OPEN_INDEX_ERROR);
+		return OPEN_INDEX_ERROR;
 	}
-
-//	RM *rm = RM::Instance();
-//	RM_ScanIterator rmsi;
-//	string attr = "TYPE";
-//    vector<string> attributes;
-//    attributes.push_back(attr);
-//    rm->scan(tableName, "COLUMN_NAME", CompOp(0), attributeName.c_str(), attributes, rmsi);
-//
-//    RID rid;
-//    void *data_returned = malloc(100);
-//	char *keyType;
-//    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
-//    {
-//    	unsigned len = 0;
-//    	memcpy(&len, data_returned, 4);
-//    	keyType = (char *)malloc(1);
-//    	memcpy(keyType, (char *)data_returned + 4, 1);
-//    	cout << "IX_Manager::OpenIndex - Opening index for ";
-//    	cout << tableName << "." << attributeName << " [" << keyType << "]" << "." << endl;
-//    }
-//    if (keyType == NULL)
-//    {
-//    	IX_PrintError(ATTRIBUTE_NOT_FOUND);
-//    	return ATTRIBUTE_NOT_FOUND;
-//    }
-//    free(data_returned);
-//    rmsi.close();
-	//char *keyType = (char *)malloc(1);
-	//string i = "i";
-	//memcpy(keyType, i.c_str(), 1);
 	//TODO: how to determine the type of the key
 	AttrType keyType = TypeInt;
 
@@ -1122,11 +1146,21 @@ RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle)  // close index
 	PF_FileHandle *handle = indexHandle.GetFileHandle();
 	if (_pf_manager->CloseFile(*handle) != SUCCESS)
 	{
-		IX_PrintError(FILE_OP_ERROR);
-		return FILE_OP_ERROR;
+		IX_PrintError(CLOSE_INDEX_ERROR);
+		return CLOSE_INDEX_ERROR;
 	}
 	indexHandle.Close();
 	return SUCCESS;
+}
+
+RC IX_Manager::InitIndexFile(const string fileName, const AttrType attrType)
+{
+	RC rc = SUCCESS;
+	PF_FileHandle handle;
+	_pf_manager->OpenFile(fileName.c_str(), handle);
+	rc = WriteMetadata(handle, 0, 0, 0, attrType);
+	_pf_manager->CloseFile(handle);
+	return rc;
 }
 
 /********************* IX_Manager End *********************/
@@ -1373,16 +1407,8 @@ RC IX_IndexHandle::LoadMetadata()
 template <typename KEY>
 RC IX_IndexHandle::UpdateMetadata(const BTree<KEY> *tree)
 {
-	void *page = malloc(PF_PAGE_SIZE);
-
-	unsigned height = tree->GetHeight();
-	memcpy(page, &tree->GetRoot()->pageNum, 4);
-	memcpy((char *)page + 4, &height, 4);
-	memcpy((char *)page + 4, &this->_free_page_num, 4);
-
-	RC rc = this->_pf_handle->WritePage(0, page);
-	free(page);
-	return rc;
+	return WriteMetadata(*(this->_pf_handle), tree->GetRoot()->pageNum,
+			tree->GetHeight(), this->_free_page_num, this->_key_type);
 }
 
 template <typename KEY>
@@ -1460,9 +1486,9 @@ RC IX_IndexHandle::Open(PF_FileHandle *handle, AttrType keyType)
 
 	this->_pf_handle = handle;
 	this->_key_type = keyType;
-	this->LoadMetadata();
+	RC rc = this->LoadMetadata();
 
-	return SUCCESS;
+	return rc;
 }
 
 RC IX_IndexHandle::Close()

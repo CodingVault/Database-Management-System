@@ -19,9 +19,12 @@ typedef enum {
 
 	INVALID_OPERATION = -1,
 	FILE_OP_ERROR = -2,
-	FILE_NOT_FOUND = -3,
 
-	ATTRIBUTE_NOT_FOUND = -4,
+	ATTRIBUTE_NOT_FOUND = 10,
+	CREATE_INDEX_ERROR = 11,
+	DESTROY_INDEX_ERROR = 12,
+	OPEN_INDEX_ERROR = 13,
+	CLOSE_INDEX_ERROR = 14,
 } ReturnCode;
 
 class IX_IndexHandle;
@@ -130,6 +133,9 @@ class IX_Manager {
  protected:
   IX_Manager   ();                             // Constructor
   ~IX_Manager  ();                             // Destructor
+
+ private:
+  RC InitIndexFile(const string fileName, const AttrType attrType);
  
  private:
   static IX_Manager *_ix_manager;
