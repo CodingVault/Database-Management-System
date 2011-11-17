@@ -31,7 +31,6 @@ using namespace std;
 #define SLOTS_CAPACITY 1024
 #define REORGANIZE_LOAD 10
 
-
 // Return code
 typedef int RC;
 
@@ -65,6 +64,8 @@ typedef enum { EQ_OP = 0,  // =
            NE_OP,      // !=
            NO_OP       // no condition
 } CompOp;
+
+bool compare(const void *recordValue, const CompOp &compOp, const void *inValue, const AttrType &type);
 
 /********************** NEW TYPE  **********************/
 typedef struct

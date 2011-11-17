@@ -1316,11 +1316,14 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 		free(page);
 
 		if (rc != SUCCESS)
-			cout << "IX_IndexHandle::WriteNodes - Failed to write page " << node->pageNum << "." << endl;
+		{
+			cerr << "IX_IndexHandle::WriteNodes - Failed to write page " << node->pageNum << "." << endl;
+			return rc;
+		}
 		else
 			cout << "IX_IndexHandle::WriteNodes - Wrote one " << (node->type == NodeType(1) ? "leaf" : "non-leaf") << " node on page " << node->pageNum << "." << endl;
-		return rc;
 	}
+	return rc;
 }
 
 template <typename KEY>
@@ -1385,13 +1388,19 @@ RC IX_IndexHandle::UpdateMetadata(const BTree<KEY> *tree)
 template <typename KEY>
 RC IX_IndexHandle::InsertEntry(BTree<KEY> **tree, void *key, const RID &rid)
 {
-	const int intKey = *(KEY *)key;
+	const KEY theKey = *(KEY *)key;
 
 	if (*tree == NULL)
 		this->InitTree(tree);
 
-	(*tree)->InsertEntry(key, rid);
-	this->WriteNodes((*tree)->GetUpdatedNodes());
+	RC rc = (*tree)->InsertEntry(theKey, rid);
+	if (rc != SUCCESS)
+	{
+		cerr << "ERROR!" << endl; // TODO: change it!
+		return rc;
+	}
+
+	rc = this->WriteNodes((*tree)->GetUpdatedNodes());
 	(*tree)->ClearPendingNodes();
 
 	if (DEBUG)
@@ -1399,6 +1408,7 @@ RC IX_IndexHandle::InsertEntry(BTree<KEY> **tree, void *key, const RID &rid)
 		cout << "IX_IndexHandle::InsertEntry - Print tree:" << endl;
 		PrintTree(*tree);
 	}
+	return rc;
 }
 
 /* ================== Protected Functions End ================== */
