@@ -15,8 +15,6 @@ using namespace std;
 
 typedef enum {
 	SUCCESS = 0,
-	RECORD_NOT_FOUND,
-	KEY_EXISTS,
 
 	INVALID_OPERATION = -1,
 	FILE_OP_ERROR = -2,
@@ -26,6 +24,11 @@ typedef enum {
 	DESTROY_INDEX_ERROR = 12,
 	OPEN_INDEX_ERROR = 13,
 	CLOSE_INDEX_ERROR = 14,
+
+	KEY_EXISTS,
+	ENTRY_NOT_FOUND,
+	INSERT_ENTRY_ERROR,
+	SEARCH_ENTRY_ERROR,
 } ReturnCode;
 
 class IX_IndexHandle;
@@ -51,7 +54,7 @@ struct BTreeNode {
 	vector<RID> rids;
 	vector<BTreeNode<KEY>*> children;
 
-	int pageNum;	// -1 indicates unsaved page
+	int pageNum;	// -1 indicates unsaved page	// TODO: can be 0 after metadata is used
 	int leftPageNum;	// -1 means no left page; this is the most left one
 	int rightPageNum;	// -1 means no right page; this is the most right one
 	vector<int> childrenPageNums;
@@ -85,8 +88,10 @@ public:
 	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
 	vector<BTreeNode<KEY>*> GetDeletedNodes() const;
 	void ClearPendingNodes();
+
 	BTreeNode<KEY>* GetRoot() const;
 	unsigned GetHeight() const;
+	KEY* GetMinKey();
 
 protected:
 	BTree();
@@ -155,17 +160,17 @@ class IX_IndexHandle {
   //     For varchar: use 4 bytes to store the length of characters, then store the actual characters.
   RC InsertEntry(void *key, const RID &rid);  // Insert new index entry
   RC DeleteEntry(void *key, const RID &rid);  // Delete index entry
-  template <typename KEY>
-  RC SearchEntry(const KEY key,  unsigned &pageNum, unsigned &pos);
-  template <typename KEY>
-  RC ReadNode(const unsigned pageNum, const NodeType nodeType,BTreeNode<KEY> **Node)const;
+  RC GetEntry(void *key, const CompOp compOp, RID &rid);
+  RC GetMinKey(void *key);
 
-  RC Open(PF_FileHandle *handle, AttrType keyType);
+  RC Open(PF_FileHandle *handle);
   RC Close();
   PF_FileHandle* GetFileHandle() const;
   AttrType GetKeyType() const;
 
  protected:
+//  template <typename KEY>
+//  BTree<KEY>* GetIndex();
   template <typename KEY>
   RC InitTree(BTree<KEY> **tree);
   template <typename KEY>
@@ -178,9 +183,15 @@ class IX_IndexHandle {
 
  private:
   template <typename KEY>
-  RC InsertEntry(BTree<KEY> **tree, void *key, const RID &rid);	// TODO: const key?
+  RC GetEntry(BTree<KEY> *index, void *key, const CompOp compOp, RID &rid);
+  template <typename KEY>
+  RC InsertEntry(BTree<KEY> **index, void *key, const RID &rid);	// TODO: const key?
   template <typename KEY>
   RC DeleteEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
+  template <typename KEY>
+  RC GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid);
+  template <typename KEY>
+  RC GetRightEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid);
 
  private:
   PF_FileHandle *_pf_handle;
@@ -216,12 +227,11 @@ class IX_IndexScan {
     	  void        *value);
 
  private:
+  bool isOpen;
   char keyValue[PF_PAGE_SIZE];
+  void* skipValue;
   CompOp compOp;
-  AttrType type;
   IX_IndexHandle* indexHandle;
-  char nextSearchValue[PF_PAGE_SIZE];
-  RID search_rid;
 };
 
 // print out the error message for a given return code
