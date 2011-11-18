@@ -86,7 +86,7 @@ public:
 	RC DeleteTree(BTreeNode<KEY> *Node);
 
 	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
-	vector<BTreeNode<KEY>*> GetDeletedNodes() const;
+	vector<unsigned> GetDeletedPageNums() const;
 	void ClearPendingNodes();
 
 	BTreeNode<KEY>* GetRoot() const;
@@ -99,14 +99,12 @@ protected:
 	RC Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, const unsigned pos);
 	RC Insert(BTreeNode<KEY> *rightNode);
 
-	RC delete_NLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KEY key, const RID &rid,int& oldchildPos);
-	RC delete_LeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos);
+	RC DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KEY key, const RID &rid,int& oldchildPos);
+	RC DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos);
 
-    void redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
-	void redistribute_LeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
-
-	void merge_LeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
-    void merge_NLeafNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
+	void RedistributeNLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+	void RedistributeLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+	void MergeNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
 
 private:
 	void InitRootNode(const NodeType nodeType);
@@ -118,7 +116,7 @@ private:
 	Functor<IX_IndexHandle, KEY> _func_ReadNode;
 
 	vector<BTreeNode<KEY>*> _updated_nodes;
-	vector<BTreeNode<KEY>*> _deleted_nodes;
+	vector<unsigned> _deleted_pagenums;
 };
 
 /******************** Tree Structure ********************/
