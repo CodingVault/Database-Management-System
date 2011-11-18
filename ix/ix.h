@@ -175,6 +175,7 @@ class IX_IndexHandle {
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
   template <typename KEY>
   RC WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
+  RC WriteDeletedNodes(const vector<unsigned> &_deleted_pagenums);
   RC LoadMetadata();
   template <typename KEY>
   RC UpdateMetadata(const BTree<KEY> *tree);
@@ -185,7 +186,7 @@ class IX_IndexHandle {
   template <typename KEY>
   RC InsertEntry(BTree<KEY> **index, void *key, const RID &rid);	// TODO: const key?
   template <typename KEY>
-  RC DeleteEntry(BTree<KEY> **tree, const KEY key, const RID &rid);
+  RC DeleteEntry(BTree<KEY> **tree, void* key, const RID &rid);
   template <typename KEY>
   RC GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid);
   template <typename KEY>

@@ -1111,11 +1111,11 @@ RC BTree<KEY>::DeleteEntry(const KEY key, const RID &rid)
 	//cout<<"the height of the tree is: "<<this->_height<<endl;
 	if(this->_root->type == LEAF_NODE)
 	{
-		return delete_LeafNode(this->_root,key,rid,oldchildPos);
+		return DeleteLeafNode(this->_root,key,rid,oldchildPos);
 	}
 	else
 	{
-		return delete_NLeafNode(this->_root,1,key,rid,oldchildPos);
+		return DeleteNLeafNode(this->_root,1,key,rid,oldchildPos);
 	}
 }
 
