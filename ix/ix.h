@@ -17,13 +17,15 @@ typedef enum {
 	SUCCESS = 0,
 
 	INVALID_OPERATION = -1,
-	FILE_OP_ERROR = -2,
+	INVALIDE_DATA = -2,
+	FILE_OP_ERROR = -3,
 
 	ATTRIBUTE_NOT_FOUND = 10,
 	CREATE_INDEX_ERROR = 11,
 	DESTROY_INDEX_ERROR = 12,
 	OPEN_INDEX_ERROR = 13,
 	CLOSE_INDEX_ERROR = 14,
+	INVALID_INDEX_HANDLE = 15,
 
 	KEY_EXISTS,
 	ENTRY_NOT_FOUND,
@@ -35,7 +37,7 @@ class IX_IndexHandle;
 
 /******************** Tree Structure ********************/
 
-#define DEFAULT_ORDER 2
+#define DEFAULT_ORDER 10
 
 typedef enum {
 	NON_LEAF_NODE = 0,

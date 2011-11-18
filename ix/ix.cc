@@ -18,26 +18,22 @@ RC GetAttrType(const string tableName, const string attributeName, AttrType &att
 
 	RM *rm = RM::Instance();
 	RM_ScanIterator rmsi;
-    vector<string> attributes;
-    attributes.push_back(projAttr);
-    rm->scan(tableName, condAttr, CompOp(0), attributeName.c_str(), attributes, rmsi);
+    vector<Attribute> attributes;
+    RC rc = rm->getAttributes(tableName, attributes);
+    if (rc != SUCCESS)
+    	return rc;
 
-    RID rid;
-    void *data_returned = malloc(10);
-    if (rmsi.getNextTuple(rid, data_returned) == RM_EOF)
+    for (unsigned index = 0; index < attributes.size(); index++)
     {
-        free(data_returned);
-        rmsi.close();
-    	IX_PrintError(ATTRIBUTE_NOT_FOUND);
-    	return ATTRIBUTE_NOT_FOUND;
+    	if (strcmp(attributeName.c_str(), attributes[index].name.c_str()) == 0)
+    	{
+    		attrType = attributes[index].type;
+    		return SUCCESS;
+    	}
     }
 
-    unsigned typeId = *(int *)data_returned;
-    attrType = AttrType(typeId);
-    free(data_returned);
-    rmsi.close();
-
-	return SUCCESS;
+    IX_PrintError(ATTRIBUTE_NOT_FOUND);
+    return ATTRIBUTE_NOT_FOUND;
 }
 
 RC WriteMetadata(PF_FileHandle &handle, const unsigned rootPageNum,
@@ -46,7 +42,8 @@ RC WriteMetadata(PF_FileHandle &handle, const unsigned rootPageNum,
 	void *page = malloc(PF_PAGE_SIZE);
 	memcpy(page, &rootPageNum, 4);
 	memcpy((char *)page + 4, &height, 4);
-	memcpy((char *)page + 4, &attrType, 4);
+	memcpy((char *)page + 8, &freepageNum, 4);
+	memcpy((char *)page + 12, &attrType, 4);
 	RC rc = handle.WritePage(0, page);
 	free(page);
 
@@ -1270,12 +1267,12 @@ RC IX_Manager::OpenIndex(const string tableName,         // open an index
 RC IX_Manager::CloseIndex(IX_IndexHandle &indexHandle)  // close index
 {
 	PF_FileHandle *handle = indexHandle.GetFileHandle();
+	indexHandle.Close();
 	if (_pf_manager->CloseFile(*handle) != SUCCESS)
 	{
 		IX_PrintError(CLOSE_INDEX_ERROR);
 		return CLOSE_INDEX_ERROR;
 	}
-	indexHandle.Close();
 	return SUCCESS;
 }
 
@@ -1421,7 +1418,8 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 				}
 
 				memcpy(&this->_free_page_num, page, 4);
-				cout << "IX_IndexHandle::WriteNodes - Re-use free page " << node->pageNum << "; next free page is " << this->_free_page_num << "." << endl;
+				if (DEBUG)
+					cout << "IX_IndexHandle::WriteNodes - Re-use free page " << node->pageNum << "; next free page is " << this->_free_page_num << "." << endl;
 			}
 			else	// new page
 			{
@@ -1437,7 +1435,8 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 				if (node->right)
 					node->right->leftPageNum = node->pageNum;
 			}
-			cout << "IX_IndexHandle::WriteNodes - New page will be written on page " << node->pageNum << "." << endl;
+			if (DEBUG)
+				cout << "IX_IndexHandle::WriteNodes - New page will be written on page " << node->pageNum << "." << endl;
 		}
 
 		// update page data
@@ -1479,10 +1478,12 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 
 		if (rc != SUCCESS)
 		{
-			cerr << "IX_IndexHandle::WriteNodes - Failed to write page " << node->pageNum << "." << endl;
+			if (DEBUG)
+				cerr << "IX_IndexHandle::WriteNodes - Failed to write page " << node->pageNum << "." << endl;
 			return rc;
 		}
-		else
+
+		if (DEBUG)
 			cout << "IX_IndexHandle::WriteNodes - Wrote one " << (node->type == NodeType(1) ? "leaf" : "non-leaf") << " node on page " << node->pageNum << "." << endl;
 	}
 	return rc;
@@ -1511,14 +1512,16 @@ RC IX_IndexHandle::InitTree(BTree<KEY> **tree)
 	// initialize tree
 	if (this->_height > 0)	// read root from file
 	{
-		cout << "IX_IndexHandle::InitTree - Reading the root [at page " << this->_root_page_num << "] for a tree of height " << this->_height << "." << endl;
+		if (DEBUG)
+			cout << "IX_IndexHandle::InitTree - Reading the root [at page " << this->_root_page_num << "] for a tree of height " << this->_height << "." << endl;
 		NodeType rootNodeType = this->_height == 1 ? NodeType(1) : NodeType(0);
 		BTreeNode<KEY> *root = ReadNode<KEY>(this->_root_page_num, rootNodeType);
 		*tree = new BTree<KEY>(DEFAULT_ORDER, root, this->_height, this, &IX_IndexHandle::ReadNode<KEY>);
 	}
 	else	// create an empty tree
 	{
-		cout << "IX_IndexHandle::InitTree - Initializing a tree with empty root as a leaf node." << endl;
+		if (DEBUG)
+			cout << "IX_IndexHandle::InitTree - Initializing a tree with empty root as a leaf node." << endl;
 		*tree = new BTree<KEY>(DEFAULT_ORDER, this, &IX_IndexHandle::ReadNode<KEY>);
 	}
 
@@ -1544,8 +1547,19 @@ RC IX_IndexHandle::LoadMetadata()
 	memcpy(&this->_height, (char *)page + offset, 4);
 	offset += 4;
 	memcpy(&this->_free_page_num, (char *)page + offset, 4);
+	offset += 4;
+	memcpy(&this->_key_type, (char *)page + offset, 4);
 	free(page);
 
+	if (DEBUG)
+	{
+		cout << "IX_IndexHandle::LoadMetadata - Loaded metadata from index file:" << endl;
+		cout << "	Root page #: " << this->_root_page_num << endl;
+		cout << "	Height of index tree: " << this->_height << endl;
+		cout << "	Free page #: " << this->_free_page_num << endl;
+		cout << "	Key type: " << this->_key_type << endl;
+		cout << (this->_key_type == TypeInt ? "YES" : "NO") << endl;
+	}
 	return rc;
 }
 
@@ -1856,20 +1870,35 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
 		IX_PrintError(INVALID_OPERATION);
 		return INVALID_OPERATION;
 	}
-	this->isOpen = true;
+	if (indexHandle.GetFileHandle() == NULL)
+	{
+		IX_PrintError(INVALID_INDEX_HANDLE);
+		return INVALID_INDEX_HANDLE;
+	}
+	if (compOp != NO_OP && value == NULL)
+	{
+		IX_PrintError(INVALIDE_DATA);
+		return INVALIDE_DATA;
+	}
 
+	this->indexHandle = new IX_IndexHandle;
 	*(this->indexHandle) = indexHandle;
 	this->compOp = compOp;
-	if (this->compOp == NE_OP)
+
+	if (value != NULL)
 	{
-		this->skipValue = malloc(4);
-		memcpy(this->skipValue, value, 4);
-	}
-	else
-	{
-		memcpy(this->keyValue, value, 4);
+		if (this->compOp == NE_OP)
+		{
+			this->skipValue = malloc(4);
+			memcpy(this->skipValue, value, 4);
+		}
+		else
+		{
+			memcpy(this->keyValue, value, 4);
+		}
 	}
 
+	this->isOpen = true;
 	return SUCCESS;
 }
 
@@ -1880,13 +1909,15 @@ RC IX_IndexScan::CloseScan()
 		IX_PrintError(INVALID_OPERATION);
 		return INVALID_OPERATION;
 	}
-	this->isOpen = false;
 
+	if (this->indexHandle)
+		delete this->indexHandle;
 	this->indexHandle = NULL;
 	if (this->skipValue)
 		free(this->skipValue);
 	this->skipValue = NULL;
 
+	this->isOpen = false;
 	return SUCCESS;
 }
 
@@ -1914,82 +1945,6 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 	return SUCCESS;
 }
 
-///*
-// * get next matching entry
-// */
-//template <typename KEY>
-//RC IX_IndexScan::get_next_entry(RID &rid)
-//{
-//	this->indexHandle
-//
-//	unsigned i = 0;
-//	unsigned position = 0;
-//	char currentValue[PF_PAGE_SIZE] = {"\0"};
-//	KEY searchKey;
-//	unsigned value_length = 0;
-//	unsigned pageNum = 0;
-//	BTreeNode<KEY>* Node = NULL;
-//	RC rc = 0;
-//
-//	if (this->type == TypeInt)
-//	{
-//		searchKey = *(int*)(this->nextSearchValue);
-//		value_length = 4;
-//		rc = this->indexHandle->SearchEntry(searchKey,pageNum,position);
-//		if (rc)
-//		{
-//			return rc;
-//		}
-//	}
-//	else if(this->type == TypeReal)
-//	{
-//		searchKey = *(float*)(this->nextSearchValue);
-//		value_length = 4;
-//		rc = this->indexHandle->SearchEntry(searchKey,pageNum,position);
-//		if( rc )
-//		{
-//			return rc;
-//		}
-//	}
-//
-//	rc = this->indexHandle->ReadNode(pageNum,LEAF_NODE,&Node);
-//	if( rc )
-//	{
-//		return rc;
-//	}
-//
-//	do
-//	{
-//	    for(i = position; i < Node->keys.size(); i++)
-//	    {
-//	    	if(Node->rids[i].pageNum == this->search_rid.pageNum &&
-//	    			Node->rids[i].slotNum == this->search_rid.slotNum)
-//	    	{
-//	    		continue;
-//	    	}
-//		    memcpy(currentValue,&(Node->keys[i]),value_length);
-//		    if(compare(currentValue, compOp, keyValue, this->type))
-//		    {
-//			    rid.pageNum = Node->rids[i].pageNum;
-//			    rid.slotNum = Node->rids[i].slotNum;
-//			    memcpy(this->nextSearchValue,currentValue,value_length);
-//			    search_rid.pageNum = rid.pageNum;
-//			    search_rid.slotNum = rid.slotNum;
-//			    return SUCCESS;
-//		    }
-//	    }
-//	    if( Node->rightPageNum == -1 )
-//	    {// reach the rightmost page
-//	    	delete Node;
-//	    	return ENTRY_NOT_FOUND;
-//	    }
-//	    // fetch the new leaf page
-//	    delete Node;
-//	    this->indexHandle->ReadNode(Node->rightPageNum,LEAF_NODE,&Node);
-//	} while (Node->rightPageNum != -1);
-//	return INVALID_OPERATION;
-//}
-
 /********************* IX_IndexScan End *********************/
 
 void IX_PrintError(RC rc)
@@ -2009,6 +1964,9 @@ void IX_PrintError(RC rc)
 		break;
 	case ENTRY_NOT_FOUND:
 		errMsg = "Entry does not exist.";
+		break;
+	case INVALID_INDEX_HANDLE:
+		errMsg = "Invalid index handle.";
 		break;
 	}
 
