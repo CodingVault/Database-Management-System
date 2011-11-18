@@ -469,58 +469,47 @@ void BTree<KEY>::redistribute_NLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* sib
  * assume there are more elements in siblingNode to spare
  */
 template <typename KEY>
-void BTree<KEY>::redistribute_LeafNode( BTreeNode<KEY>* Node, BTreeNode<KEY>* siblingNode )
+void BTree<KEY>::redistribute_LeafNode(BTreeNode<KEY>* leafNode, BTreeNode<KEY>* siblingNode)
 {
 	//cout<<"======redistribute begins===="<<endl;
-    unsigned int i = 0;
-    unsigned int even_no = 0;
-	if( Node->pos > siblingNode->pos )
+    unsigned even_no = 0;
+	if (leafNode->pos > siblingNode->pos)
 	{// left sibling
 		//cout<<"the current node has "<<Node->keys.size()<<" items and its left sibling has"<<siblingNode->keys.size()<<endl;
-		even_no = (siblingNode->keys.size() + Node->keys.size())/2;
+		even_no = (siblingNode->keys.size() + leafNode->keys.size()) / 2;
 		// update the key value of parent
-		Node->parent->keys[siblingNode->pos] = siblingNode->keys[even_no];
+		leafNode->parent->keys[siblingNode->pos] = siblingNode->keys[even_no];
         //cout<<"update the separate key in parent"<<endl;
 		// move keys and RIDs from siblingNode to Node
-		for(i = siblingNode->keys.size()-1; i >= even_no; i--)
+		for (unsigned i = siblingNode->keys.size() - 1; i >= even_no; i--)
 		{
-		    Node->keys.insert(Node->keys.begin(),siblingNode->keys[i]);
-		    Node->rids.insert(Node->rids.begin(),siblingNode->rids[i]);
+		    leafNode->keys.insert(leafNode->keys.begin(),siblingNode->keys[i]);
+		    leafNode->rids.insert(leafNode->rids.begin(),siblingNode->rids[i]);
 		}
 		//cout<<"move the items of sibling node into the current node"<<endl;
 		//delete the keys and RIDs in siblingNode
-		while(siblingNode->keys.size() > even_no)
-		{
-			siblingNode->keys.erase(siblingNode->keys.end()-1);
-			siblingNode->rids.erase(siblingNode->rids.end()-1);
-			//cout<<"delete the items of sibling node"<<endl;
-		}
-
+		siblingNode->keys.resize(even_no);
 	}
 	else
 	{// right sibling
 		//cout<<"redistribute with right sibling"<<endl;
-		even_no = (siblingNode->keys.size()- Node->keys.size())/2;
+		even_no = (siblingNode->keys.size() - leafNode->keys.size()) / 2;
 
 		// update the key value of parent
-		Node->parent->keys[Node->pos] = siblingNode->keys[even_no-1];
+		leafNode->parent->keys[leafNode->pos] = siblingNode->keys[even_no - 1];
 
 		// move keys and RIDs from siblingNode to Node
-		i = 0;
-		while(i < even_no )
+		for (unsigned i = 0; i < even_no; i++)
 		{
-		    Node->keys.push_back(siblingNode->keys[i]);
-		    Node->rids.push_back(siblingNode->rids[i]);
-		    i++;
+		    leafNode->keys.push_back(siblingNode->keys[i]);
+		    leafNode->rids.push_back(siblingNode->rids[i]);
 		}
 
 		//delete the keys and RIDs in siblingNode
-		i = 0;
-		while(i < even_no)
+		for (unsigned i = 0; i < even_no; i++)
 		{
 			siblingNode->keys.erase(siblingNode->keys.begin());
 			siblingNode->rids.erase(siblingNode->rids.begin());
-			i++;
 		}
 	}
 }
