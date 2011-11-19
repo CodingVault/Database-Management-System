@@ -4,7 +4,7 @@
 #include "ix.h"
 
 #define IX_FILE_NAME(tableName, attrName) ("IX_" + tableName + "_" + attrName + ".idx")
-#define DEBUG true
+#define DEBUG false
 
 IX_Manager* IX_Manager::_ix_manager = 0;
 PF_Manager* IX_Manager::_pf_manager = 0;
@@ -62,10 +62,10 @@ RC ExistInVector(const vector<KEY>& keys, const KEY& key )
 	{
 		if( key == keys[i])
 		{
-			return 0;
+			return -1;
 		}
 	}
-	return -1;
+	return 0;
 }
 
 template <typename KEY>
@@ -591,6 +591,7 @@ void BTree<KEY>::MergeNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode)
     leftNode->parent->keys[leftNode->pos] = leftNode->parent->keys[rightNode->pos];
 }
 
+
 /*
  *  delete the non-leaf node recursively
  */
@@ -603,9 +604,9 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 
 	/*********************************************************************************/
 	//find the children to go down
-	for ( i = 0; i < Node->keys.size(); i++ )
+	for ( i = 0; i < Node->children.size(); i++ )
 	{
-		if ( key < Node->keys[i] )
+		if ( (i < Node->children.size()-1&& key < Node->keys[i]) || i == Node->children.size()-1 )
 		{
 			if( nodeLevel + 1 < this->_height )
 			{// child node is a non-leaf node
@@ -722,10 +723,13 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 			}
 
 			this->_updated_nodes.push_back(this->_root);// update the new root
-			if(!ExistInVector( _deleted_pagenums, (unsigned)Node->pageNum ))
+			if(Node->pageNum > 0 && !ExistInVector( _deleted_pagenums, (unsigned)Node->pageNum ))
 			{
 				this->_deleted_pagenums.push_back(Node->pageNum);// delete the old root
+				delete Node;
+				Node = NULL;
 			}
+			//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
 			this->_height--;
 			//cout<<"the height of the tree decreases by 1 and the new root has "<<this->_root->children.size()<<" children"<<endl;
 			return SUCCESS;
@@ -818,7 +822,7 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 		{// right sibling
 			leftNode = Node;
 			rightNode = siblingNode;
-			//cout<<"the non leaf node at position "<<oldchildPos<< " is deleted"<<endl;
+			//cout<<"the non leaf node at position "<<deletedChildPos<< " is deleted"<<endl;
 		}
 		else
 		{// left sibling
@@ -828,21 +832,24 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 
 		MergeNode(leftNode,rightNode);
 		//cout<<"merge into the current non leaf node"<<endl;
-		if(!ExistInVector( _deleted_pagenums, (unsigned)(siblingNode->pageNum)))
-		{
-           	 this->_deleted_pagenums.push_back(siblingNode->pageNum);
-		}
-		this->_updated_nodes.push_back(leftNode);
-		this->_updated_nodes.push_back(leftNode->parent);
 		//cout<<"after merge, the node has "<<Node->children.size()<<" children"<<endl;
 		deletedChildPos = rightNode->pos;
-		leftNode = NULL;
-		rightNode = NULL;
+
 		//cout<<"merge into the left sibling node"<<endl;
 		//cout<<siblingNode->children[4]->keys.size()<<endl;
 		//cout<<"after merge, the  node has "<<siblingNode->children.size()<<" items"<<endl;
 		//cout<<"XXXXXXXXXX"<<siblingNode->children[siblingNode->children.size()-2]->keys.size()<<endl;
 		//cout<<"the non leaf node at position "<<oldchildPos<< " is deleted"<<endl;
+		this->_updated_nodes.push_back(leftNode);
+		this->_updated_nodes.push_back(leftNode->parent);
+		if(rightNode->pageNum > 0 && !ExistInVector( _deleted_pagenums, (unsigned)(rightNode->pageNum)))
+		{
+			this->_deleted_pagenums.push_back(rightNode->pageNum);
+		    delete rightNode;
+		}
+		//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
+		leftNode = NULL;
+		rightNode = NULL;
 		return SUCCESS;
 	}
 }
@@ -862,7 +869,7 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 		if( key == Node->keys[i] && Node->rids[i].pageNum ==  rid.pageNum
 				&& Node->rids[i].slotNum == rid.slotNum )
 		{
-			//cout<<"find the key in the leaf node at position "<<Node->pos<<endl;
+			//cout<<"find the key in the leaf node and delete it successfully!"<<endl;
 			Node->keys.erase(Node->keys.begin()+i);
 			Node->rids.erase(Node->rids.begin()+i);
 			break;
@@ -895,10 +902,11 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 			{
 				//cout<<"The B tree now is empty!"<<endl;
 				this->_height = 0;
-				if(!ExistInVector( _deleted_pagenums,(unsigned) Node->pageNum ))
+				if( Node->pageNum > 0 && !ExistInVector( _deleted_pagenums,(unsigned) Node->pageNum ))
 				{
 					this->_deleted_pagenums.push_back(Node->pageNum);
 				}
+				//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
 				return SUCCESS;
 			}
 			else
@@ -912,8 +920,10 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 	// case 3 : delete normally in leaf node
 	if( keysNum -1 >= this->_order )
 	{// usual case, delete the child node
+
 		deletedChildPos = -1;
 		this->_updated_nodes.push_back(Node);
+		//cout<<"delete normally"<<endl;
 		return SUCCESS;
 	}
     /************************************************************************************************/
@@ -956,7 +966,6 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 		siblingNode->right = Node;
 	}
 
-
     if(siblingNode->keys.size() > this->_order)
 	{// if the sibling node has extra entries
     	//cout<<"need to redistribute the leaf node with its sibling in position "<<siblingNode->pos<<endl;
@@ -987,14 +996,16 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 
 		MergeNode(leftNode,rightNode);
 		//cout<<"merge into the current non leaf node"<<endl;
-	    if(!ExistInVector( _deleted_pagenums, (unsigned)(siblingNode->pageNum)))
-	    {
-	    	this->_deleted_pagenums.push_back(siblingNode->pageNum);
-		}
 		this->_updated_nodes.push_back(leftNode);
 		this->_updated_nodes.push_back(leftNode->parent);
 		//cout<<"after merge, the node has "<<Node->children.size()<<" children"<<endl;
 		deletedChildPos = rightNode->pos;
+		if(Node->pageNum > 0 && !ExistInVector( _deleted_pagenums, (unsigned)(rightNode->pageNum)))
+	    {
+			this->_deleted_pagenums.push_back(rightNode->pageNum);
+			delete rightNode;
+		}
+		//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
 		leftNode = NULL;
 		rightNode = NULL;
 		//cout<<"merge into the left sibling node"<<endl;
