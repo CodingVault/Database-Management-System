@@ -31,6 +31,8 @@ typedef enum {
 	ENTRY_NOT_FOUND,
 	INSERT_ENTRY_ERROR,
 	SEARCH_ENTRY_ERROR,
+
+	END_OF_SCAN,
 } ReturnCode;
 
 class IX_IndexHandle;

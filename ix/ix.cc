@@ -4,7 +4,7 @@
 #include "ix.h"
 
 #define IX_FILE_NAME(tableName, attrName) ("IX_" + tableName + "_" + attrName + ".idx")
-#define DEBUG true
+#define DEBUG false
 
 IX_Manager* IX_Manager::_ix_manager = 0;
 PF_Manager* IX_Manager::_pf_manager = 0;
@@ -1946,8 +1946,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 	CompOp op = (this->compOp == LE_OP || this->compOp == GE_OP) ? EQ_OP : this->compOp;
 	if (this->indexHandle->GetEntry(this->keyValue, op, rid) != SUCCESS)
 	{
-		IX_PrintError(ENTRY_NOT_FOUND);
-		return ENTRY_NOT_FOUND;
+		return END_OF_SCAN;
 	}
 	if (DEBUG)
 	{
