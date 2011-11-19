@@ -2054,12 +2054,6 @@ void IX_PrintError(RC rc)
 		break;
 
 	// IX_IndexHandle
-	case KEY_EXISTS:
-		errMsg = "Key exists.";
-		break;
-	case ENTRY_NOT_FOUND:
-		errMsg = "Entry does not exist.";
-		break;
 	case OPEN_INDEX_HANDLE_ERROR:
 		errMsg = "Cannot open index handle.";
 		break;
