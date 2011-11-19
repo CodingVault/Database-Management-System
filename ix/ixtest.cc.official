@@ -1173,11 +1173,13 @@ int main()
     testCase_7("tbl_employee", "Height");
     testCase_8("tbl_employee", "Height");
 
-    // Extra Credit Work
-    // Duplicat Entries
-    testCase_extra_1("tbl_employee", "Age");
-    // TypeVarChar
-    testCase_extra_2("tbl_employee", "EmpName");
+//    // Extra Credit Work
+//    // Duplicat Entries
+//    testCase_extra_1("tbl_employee", "Age");
+//    // TypeVarChar
+//    testCase_extra_2("tbl_employee", "EmpName");
+    
+    cout << endl << "PASS..." << endl << endl;
     
     return 0;
 }

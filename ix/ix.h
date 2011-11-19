@@ -16,30 +16,39 @@ using namespace std;
 typedef enum {
 	SUCCESS = 0,
 
-	INVALID_OPERATION = -1,
-	INVALIDE_DATA = -2,
-	FILE_OP_ERROR = -3,
+	// General errors
+	INVALID_OPERATION = 1,
+	FILE_OP_ERROR,
 
-	ATTRIBUTE_NOT_FOUND = 10,
-	CREATE_INDEX_ERROR = 11,
-	DESTROY_INDEX_ERROR = 12,
-	OPEN_INDEX_ERROR = 13,
-	CLOSE_INDEX_ERROR = 14,
-	INVALID_INDEX_HANDLE = 15,
+	// IX_Manager
+	ATTRIBUTE_NOT_FOUND = 11,
+	CREATE_INDEX_ERROR,
+	DESTROY_INDEX_ERROR,
+	OPEN_INDEX_ERROR,
+	CLOSE_INDEX_ERROR,
 
-	KEY_EXISTS,
+	// IX_IndexHandle
+	KEY_EXISTS = 20,	// Extra Credit
 	ENTRY_NOT_FOUND,
 	INSERT_ENTRY_ERROR,
+	DELETE_ENTRY_ERROR,
 	SEARCH_ENTRY_ERROR,
+	OPEN_INDEX_HANDLE_ERROR,
+	CLOSE_INDEX_HANDLE_ERROR,
 
-	END_OF_SCAN,
+	// IX_IndexScan
+	END_OF_SCAN = 30,	// Not an error
+	INVALID_INDEX_HANDLE = 31,
+	INVALIDE_INPUT_DATA,
+	OPEN_SCAN_ERROR,
+	CLOSE_SCAN_ERROR,
 } ReturnCode;
 
 class IX_IndexHandle;
 
 /******************** Tree Structure ********************/
 
-#define DEFAULT_ORDER 2
+#define DEFAULT_ORDER 10
 
 typedef enum {
 	NON_LEAF_NODE = 0,
@@ -222,13 +231,6 @@ class IX_IndexScan {
 
   RC GetNextEntry(RID &rid);  // Get next matching entry
   RC CloseScan();             // Terminate index scan
- protected:
-  template <typename KEY>
-  RC get_next_entry(RID &rid);
-  template <typename KEY>
-  RC open_scan(const IX_IndexHandle &indexHandle,
-		  CompOp      compOp,
-    	  void        *value);
 
  private:
   bool isOpen;
