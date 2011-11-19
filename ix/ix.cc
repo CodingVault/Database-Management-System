@@ -69,10 +69,18 @@ RC ExistInVector(const vector<KEY>& keys, const KEY& key )
 }
 
 template <typename KEY>
-unsigned BinarySearch(const vector<KEY> keys, const KEY key)
+unsigned BinarySearch(const vector<KEY> &keys, const unsigned begin, const unsigned end, const KEY key)
 {
-	// TODO: Implementation!
-	return -1;
+	if (end - begin < 2)
+		return begin;
+
+	unsigned pos = (begin + end) / 2;
+	if (key == keys[pos])
+		return pos;
+	else if (key > keys[pos])
+		return BinarySearch(keys, pos + 1, end, key);
+	else
+		return BinarySearch(keys, begin, pos, key);
 }
 
 template <typename KEY>
@@ -891,30 +899,15 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 	if(this->_height == 1)
 	{// the root is a leaf
 		keysNum = Node->keys.size();
-		if( keysNum > 1 )
-		{// the root has more than one entry
-			return SUCCESS;
-		}
-		else
+		if(keysNum == 0)
 		{// the tree becomes empty
-			if( key == Node->keys[0] && Node->rids[0].pageNum ==  rid.pageNum
-									&& Node->rids[0].slotNum == rid.slotNum )
+			if( Node->pageNum > 0 && !ExistInVector( _deleted_pagenums,(unsigned) Node->pageNum ))
 			{
-				//cout<<"The B tree now is empty!"<<endl;
-				this->_height = 0;
-				if( Node->pageNum > 0 && !ExistInVector( _deleted_pagenums,(unsigned) Node->pageNum ))
-				{
-					this->_deleted_pagenums.push_back(Node->pageNum);
-				}
-				//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
-				return SUCCESS;
+				this->_deleted_pagenums.push_back(Node->pageNum);
 			}
-			else
-			{
-				//cout<<"can not find the entry!"<<endl;
-				return ENTRY_NOT_FOUND;
-			}
+			//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
 		}
+		return SUCCESS;
 	}
 	/**************************************************************************************************/
 	// case 3 : delete normally in leaf node
