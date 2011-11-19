@@ -6,6 +6,25 @@
 
 using namespace std;
 
+static unsigned* get_shuffle(unsigned t)
+{
+    unsigned *shuffle;
+    unsigned i, j, k, temp;
+    shuffle = (unsigned*)malloc(t * sizeof(unsigned));
+    for (i = 0; i < t; i++)
+        shuffle[i] = i;
+
+    for (j = t - 1; j > 0; j--)
+    {
+    	k = rand() % (j + 1);
+        temp = shuffle[j];
+        shuffle[j] = shuffle[k];
+        shuffle[k] = temp;
+     }
+
+     return shuffle;
+}
+
 RC insertEntry(IX_IndexHandle &handle, unsigned key, const unsigned pageNum, const unsigned slotNum)
 {
 	RID rid;
@@ -55,24 +74,32 @@ void ixTest()
 	rc = ix_manager->OpenIndex(tableName, attr1.name, ix_handle);
 	assert(rc == SUCCESS);
 	cout << "==== Open index done!" << endl << endl;
-	unsigned pageNum = 0;
-	unsigned slotNum = 0;
-	rc = insertEntry(ix_handle, 1, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 2, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 7, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 5, pageNum++, slotNum);
-	rc = insertEntry(ix_handle, 6, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 3, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 4, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 8, pageNum, slotNum++);
-	rc = insertEntry(ix_handle, 9, pageNum, slotNum++);
-	for (unsigned index = 0; index < 1000; index++)
+
+	unsigned* P = get_shuffle(30);
+	for(unsigned i = 0; i < 30; i++ )
 	{
-		unsigned key = (index * 1000000 - 123245) % 341231;
-		rc = insertEntry(ix_handle, key, (pageNum + index * 8) % 20, (slotNum * index + 10) % 50);
+		cout<<"inserted key: "<<P[i]<<endl;
+		rc = insertEntry(ix_handle, P[i], P[i], P[i]);
 	}
-	assert(rc == SUCCESS);
-	cout << "==== Insert entry done!" << endl << endl;
+
+//	unsigned pageNum = 0;
+//	unsigned slotNum = 0;
+//	rc = insertEntry(ix_handle, 1, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 2, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 7, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 5, pageNum++, slotNum);
+//	rc = insertEntry(ix_handle, 6, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 3, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 4, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 8, pageNum, slotNum++);
+//	rc = insertEntry(ix_handle, 9, pageNum, slotNum++);
+//	for (unsigned index = 0; index < 1000; index++)
+//	{
+//		unsigned key = (index * 1000000 - 123245) % 341231;
+//		rc = insertEntry(ix_handle, key, (pageNum + index * 8) % 20, (slotNum * index + 10) % 50);
+//	}
+//	assert(rc == SUCCESS);
+//	cout << "==== Insert entry done!" << endl << endl;
 	rc = ix_manager->CloseIndex(ix_handle);
 	assert(rc == SUCCESS);
 	cout << "==== Close index done!" << endl << endl;
