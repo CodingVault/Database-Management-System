@@ -234,6 +234,9 @@ RC BTree<KEY>::SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned he
 			if (key == node->keys[index])
 			{
 				pos = index;
+
+				if (DEBUG)
+					cout << "BTree<KEY>::SearchNode - Found key at position [" << pos << "]." << endl;
 				return SUCCESS;
 			}
 			else if (node->keys[index] > key)
@@ -1295,15 +1298,12 @@ RC IX_Manager::InitIndexFile(const string fileName, const AttrType attrType)
 IX_IndexHandle::IX_IndexHandle()
 {
 	this->_pf_handle = NULL;
-	this->_key_type = TypeInt;
 	this->_free_page_num = 0;
 	this->_int_index = NULL;
 	this->_float_index = NULL;
 }
 IX_IndexHandle::~IX_IndexHandle()
 {
-	//if (this->_key_type)
-	//	free(this->_key_type);
 	if (this->_int_index)
 		delete this->_int_index;
 	if (this->_float_index)
@@ -1632,6 +1632,7 @@ RC IX_IndexHandle::GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, 
 {
 	if (pos > 0)
 	{
+		memcpy(key, &(node->keys[pos - 1]), 4);
 		rid = RID(node->rids[pos - 1]);
 	}
 	else if (node->leftPageNum != -1)
@@ -1657,8 +1658,6 @@ RC IX_IndexHandle::GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, 
 template <typename KEY>
 RC IX_IndexHandle::GetRightEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid)
 {
-	if (DEBUG)
-		cout << "IX_IndexHandle::GetRightEntry - Getting right entry of key [" << *(KEY *)key << "] at position [" << pos << "]." << endl;
 	if (pos + 1 < node->rids.size())
 	{
 		rid = RID(node->rids[pos + 1]);
@@ -1691,7 +1690,7 @@ RC IX_IndexHandle::GetEntry(BTree<KEY> *index, void *key, const CompOp compOp, R
 {
 	const KEY theKey = *(KEY *)key;
 
-	BTreeNode<KEY> *leafNode = NULL;
+	BTreeNode<KEY> *leafNode;
 	unsigned pos = 0;
 	RC rc = index->SearchEntry(theKey, &leafNode, pos);
 	if (rc != SUCCESS && rc != ENTRY_NOT_FOUND)
@@ -1744,7 +1743,7 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 	}
 	if (this->_key_type == TypeReal)
 	{
-		rc = this->InsertEntry(&(this->_int_index), key, rid);
+		rc = this->InsertEntry(&(this->_float_index), key, rid);
 	}
 
 	if (rc != SUCCESS)
@@ -1945,8 +1944,6 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 
 	// transform LE_OP to (EQ_OP + LT_OP) and GT_OP to (EQ_OP + GT_OP)
 	CompOp op = (this->compOp == LE_OP || this->compOp == GE_OP) ? EQ_OP : this->compOp;
-	if (DEBUG)
-		cout << "IX_IndexScan::GetNextEntry - Looking for one entry for OP [" << op << "] and key [" << *(int *)this->keyValue << "]." << endl;
 	if (this->indexHandle->GetEntry(this->keyValue, op, rid) != SUCCESS)
 	{
 		IX_PrintError(ENTRY_NOT_FOUND);
@@ -1954,8 +1951,7 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 	}
 	if (DEBUG)
 	{
-		cout << "IX_IndexScan::GetNextEntry - Found one entry [" << rid.pageNum << ":" << rid.slotNum << "] and ";
-		cout << "current key is [" << *(int *) this->keyValue << "]." << endl;
+		cout << "IX_IndexScan::GetNextEntry - Found one entry [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
 	}
 	this->compOp = this->compOp == LE_OP ? LT_OP : this->compOp;
 	this->compOp = this->compOp == GE_OP ? GT_OP : this->compOp;
