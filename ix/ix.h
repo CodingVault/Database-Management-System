@@ -39,7 +39,7 @@ class IX_IndexHandle;
 
 /******************** Tree Structure ********************/
 
-#define DEFAULT_ORDER 10
+#define DEFAULT_ORDER 2
 
 typedef enum {
 	NON_LEAF_NODE = 0,

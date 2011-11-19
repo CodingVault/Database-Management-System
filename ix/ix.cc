@@ -71,16 +71,23 @@ RC ExistInVector(const vector<KEY>& keys, const KEY& key )
 template <typename KEY>
 unsigned BinarySearch(const vector<KEY> &keys, const unsigned begin, const unsigned end, const KEY key)
 {
-	if (end - begin < 2)
+	if (begin + 1 == end && keys[begin] > key)	// e.g., look for 3 in [0, 2, 4, 6]; final: begin->4, end->6
 		return begin;
+	if (begin == end)
+	{
+		if (keys[end] < key)	// e.g., look for 3 in [2, 4, 6]; final: begin->2, end->2
+			return (end + 1);
+		return begin;	// current value is equal or greater than key
+	}
 
-	unsigned pos = (begin + end) / 2;
-	if (key == keys[pos])
-		return pos;
-	else if (key > keys[pos])
-		return BinarySearch(keys, pos + 1, end, key);
+	unsigned mid = (begin + end) / 2;
+//	cout << "Begin: " << begin << "; End: " << end << "; Mid: " << mid << endl;
+	if (key == keys[mid])
+		return mid;
+	else if (key > keys[mid])
+		return BinarySearch(keys, mid + 1, end, key);
 	else
-		return BinarySearch(keys, begin, pos, key);
+		return BinarySearch(keys, begin, mid - 1, key);
 }
 
 template <typename KEY>
@@ -199,6 +206,12 @@ void Split(const unsigned order, BTreeNode<KEY> *splitee, BTreeNode<KEY> *newNod
 	// update old node -- the left one
 	splitee->right = newNode;
 	splitee->rightPageNum = newNode->pageNum;
+	// the original right one
+	if (newNode->right)
+	{
+		newNode->right->left = newNode;
+		newNode->right->leftPageNum = newNode->pageNum;
+	}
 }
 
 /* ================== Helper Functions End ================== */
@@ -237,24 +250,25 @@ RC BTree<KEY>::SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned he
 	if (node->type == NodeType(1))		// reach leaf node
 	{
 		*leafNode = node;
-		for (unsigned index = 0; index < node->keys.size(); index++)
+		if (node->keys.size() == 0)
 		{
-			if (key == node->keys[index])
-			{
-				pos = index;
-
-				if (DEBUG)
-					cout << "BTree<KEY>::SearchNode - Found key at position [" << pos << "]." << endl;
-				return SUCCESS;
-			}
-			else if (node->keys[index] > key)
-			{
-				pos = index;	// position for insertion
-				return ENTRY_NOT_FOUND;
-			}
+			pos = 0;
+			return ENTRY_NOT_FOUND;
 		}
-		pos = node->keys.size();	// position for insertion
-		return ENTRY_NOT_FOUND;
+
+		pos = BinarySearch(node->keys, 0, node->keys.size() - 1, key);
+		if (pos < node->keys.size() && key == node->keys[pos])
+		{
+			if (DEBUG)
+				cout << "BTree<KEY>::SearchNode - Found key at position [" << pos << "]." << endl;
+			return SUCCESS;
+		}
+		else
+		{
+			if (DEBUG)
+				cout << "BTree<KEY>::SearchNode - Found position [" << pos << "] for insertion." << endl;
+			return ENTRY_NOT_FOUND;
+		}
 	}
 	else	// non-leaf node
 	{
@@ -344,6 +358,10 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 	vector<int>::iterator itChildrenPageNums = parent->childrenPageNums.begin() + rightNode->pos;
 	parent->childrenPageNums.insert(itChildrenPageNums, rightNode->pageNum);	// insert -1 in effect
 	this->_updated_nodes.push_back(parent);
+
+	// update children's positions
+	for (unsigned index = rightNode->pos + 1; index < parent->childrenPageNums.size(); index++)
+		parent->children[index]->pos++;
 
 	RC rc = SUCCESS;
 	if (parent->keys.size() > this->_order * 2)	// need to split
@@ -1039,22 +1057,22 @@ RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 		}
 		if (leafNode->parent)
 		{
-			cout << "Parent:" << endl;
+			cout << "Parent [pos - " << leafNode->parent->pos << "]:" << endl;
 			PrintNode(leafNode->parent);
 			cout << endl;
 		}
 		if (leafNode->left)
 		{
-			cout << "Left:" << endl;
+			cout << "Left [pos - " << leafNode->left->pos << "]:" << endl;
 			PrintNode(leafNode->left);
 			cout << endl;
 		}
-		cout << "Self:" << endl;
+		cout << "Self [pos - " << leafNode->pos << "]:" << endl;
 		PrintNode(leafNode);
 		cout << endl;
 		if (leafNode->right)
 		{
-			cout << "Right:" << endl;
+			cout << "Right [pos - " << leafNode->right->pos << "]:" << endl;
 			PrintNode(leafNode->right);
 		}
 		cout << "***************************************************************************";
@@ -1083,22 +1101,22 @@ RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 			}
 			if (leafNode->parent)
 			{
-				cout << "Parent:" << endl;
+				cout << "Parent [pos - " << leafNode->parent->pos << "]:" << endl;
 				PrintNode(leafNode->parent);
 				cout << endl;
 			}
 			if (leafNode->left)
 			{
-				cout << "Left:" << endl;
+				cout << "Left [pos - " << leafNode->left->pos << "]:" << endl;
 				PrintNode(leafNode->left);
 				cout << endl;
 			}
-			cout << "Self:" << endl;
+			cout << "Self [pos - " << leafNode->pos << "]:" << endl;
 			PrintNode(leafNode);
 			cout << endl;
 			if (leafNode->right)
 			{
-				cout << "Right:" << endl;
+				cout << "Right [pos - " << leafNode->right->pos << "]:" << endl;
 				PrintNode(leafNode->right);
 			}
 			cout << "***************************************************************************";
