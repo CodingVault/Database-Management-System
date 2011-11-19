@@ -4,7 +4,7 @@
 #include "ix.h"
 
 #define IX_FILE_NAME(tableName, attrName) ("IX_" + tableName + "_" + attrName + ".idx")
-#define DEBUG false
+#define DEBUG true
 
 IX_Manager* IX_Manager::_ix_manager = 0;
 PF_Manager* IX_Manager::_pf_manager = 0;
@@ -13,8 +13,8 @@ PF_Manager* IX_Manager::_pf_manager = 0;
 
 RC GetAttrType(const string tableName, const string attributeName, AttrType &attrType)
 {
-	const string condAttr = "attrs_name";
-	const string projAttr = "data_type";
+	const string condAttr = "COLUMN_NAME";
+	const string projAttr = "TYPE";
 
 	RM *rm = RM::Instance();
 	RM_ScanIterator rmsi;
@@ -1187,6 +1187,8 @@ KEY* BTree<KEY>::GetMinKey()
 	}
 
 	key = &(node->keys[0]);
+	if (DEBUG)
+		cout << "BTree<KEY>::GetMinKey - Minimum key in current index is " << *key << "." << endl;
 	return key;
 }
 
@@ -1368,6 +1370,7 @@ BTreeNode<KEY>* IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType 
 		memcpy(&childPageNum, (char *)page + offset, PAGE_NUM_LENGTH);
 		offset += PAGE_NUM_LENGTH;
 		node->childrenPageNums.push_back(childPageNum);
+		node->children.push_back(NULL);
 
 		// read keys and other children page numbers
 		for (unsigned index = 0; index < nodeNum; index++)
@@ -1558,7 +1561,6 @@ RC IX_IndexHandle::LoadMetadata()
 		cout << "	Height of index tree: " << this->_height << endl;
 		cout << "	Free page #: " << this->_free_page_num << endl;
 		cout << "	Key type: " << this->_key_type << endl;
-		cout << (this->_key_type == TypeInt ? "YES" : "NO") << endl;
 	}
 	return rc;
 }
@@ -1637,13 +1639,13 @@ RC IX_IndexHandle::GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, 
 		// TODO: update with a leaf node list managing the buffer
 		BTreeNode<KEY> *leftNode = node->left;
 		if (leftNode == NULL)
-		{
 			leftNode = this->ReadNode<KEY>(node->leftPageNum, NodeType(1));
-		}
 
 		memcpy(key, &(leftNode->keys[leftNode->keys.size() - 1]), 4);
 		rid = RID(leftNode->rids[leftNode->rids.size() - 1]);
-		delete leftNode;
+
+		if (node->left == NULL)
+			delete leftNode;
 	}
 	else
 	{
@@ -1655,9 +1657,12 @@ RC IX_IndexHandle::GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, 
 template <typename KEY>
 RC IX_IndexHandle::GetRightEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid)
 {
+	if (DEBUG)
+		cout << "IX_IndexHandle::GetRightEntry - Getting right entry of key [" << *(KEY *)key << "] at position [" << pos << "]." << endl;
 	if (pos + 1 < node->rids.size())
 	{
 		rid = RID(node->rids[pos + 1]);
+		memcpy(key, &(node->keys[pos + 1]), 4);
 	}
 	else if (node->rightPageNum != -1)
 	{
@@ -1668,12 +1673,16 @@ RC IX_IndexHandle::GetRightEntry(const BTreeNode<KEY> *node, const unsigned pos,
 
 		memcpy(key, &(rightNode->keys[0]), 4);
 		rid = RID(rightNode->rids[0]);
-		delete rightNode;
+
+		if (node->right == NULL)
+			delete rightNode;
 	}
 	else
 	{
 		return ENTRY_NOT_FOUND;
 	}
+	if (DEBUG)
+		cout << "IX_IndexHandle::GetRightEntry - Found right entry with new key [" << *(KEY *)key << "]." << endl;
 	return SUCCESS;
 }
 
@@ -1785,6 +1794,8 @@ RC IX_IndexHandle::GetEntry(void *key, const CompOp compOp, RID &rid)
 
 RC IX_IndexHandle::GetMinKey(void *key)
 {
+	if (DEBUG)
+		cout << "IX_IndexHandle::GetMinKey - Getting minimum key in current index." << endl;
     if (this->_key_type == TypeInt)
 	{
     	int* iKey = this->_int_index->GetMinKey();
@@ -1846,6 +1857,11 @@ AttrType IX_IndexHandle::GetKeyType() const
 	return this->_key_type;
 }
 
+bool IX_IndexHandle::IsOpen() const
+{
+	return (this->_pf_handle != NULL);
+}
+
 /* ================== Public Functions End ================== */
 
 /********************* IX_IndexHandle End *********************/
@@ -1870,7 +1886,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
 		IX_PrintError(INVALID_OPERATION);
 		return INVALID_OPERATION;
 	}
-	if (indexHandle.GetFileHandle() == NULL)
+	if (!indexHandle.IsOpen())
 	{
 		IX_PrintError(INVALID_INDEX_HANDLE);
 		return INVALID_INDEX_HANDLE;
@@ -1910,8 +1926,6 @@ RC IX_IndexScan::CloseScan()
 		return INVALID_OPERATION;
 	}
 
-	if (this->indexHandle)
-		delete this->indexHandle;
 	this->indexHandle = NULL;
 	if (this->skipValue)
 		free(this->skipValue);
@@ -1931,15 +1945,22 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 
 	// transform LE_OP to (EQ_OP + LT_OP) and GT_OP to (EQ_OP + GT_OP)
 	CompOp op = (this->compOp == LE_OP || this->compOp == GE_OP) ? EQ_OP : this->compOp;
+	if (DEBUG)
+		cout << "IX_IndexScan::GetNextEntry - Looking for one entry for OP [" << op << "] and key [" << *(int *)this->keyValue << "]." << endl;
 	if (this->indexHandle->GetEntry(this->keyValue, op, rid) != SUCCESS)
 	{
 		IX_PrintError(ENTRY_NOT_FOUND);
 		return ENTRY_NOT_FOUND;
 	}
+	if (DEBUG)
+	{
+		cout << "IX_IndexScan::GetNextEntry - Found one entry [" << rid.pageNum << ":" << rid.slotNum << "] and ";
+		cout << "current key is [" << *(int *) this->keyValue << "]." << endl;
+	}
 	this->compOp = this->compOp == LE_OP ? LT_OP : this->compOp;
 	this->compOp = this->compOp == GE_OP ? GT_OP : this->compOp;
 
-	if (strcmp(this->keyValue, (char *)this->skipValue) == 0)
+	if (this->skipValue != NULL && strcmp(this->keyValue, (char *)this->skipValue) == 0)
 		return GetNextEntry(rid);
 
 	return SUCCESS;

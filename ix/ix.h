@@ -167,6 +167,7 @@ class IX_IndexHandle {
   RC Close();
   PF_FileHandle* GetFileHandle() const;
   AttrType GetKeyType() const;
+  bool IsOpen() const;
 
  protected:
 //  template <typename KEY>
