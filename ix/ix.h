@@ -16,9 +16,10 @@ using namespace std;
 typedef enum {
 	SUCCESS = 0,
 
-	// General errors
+	// General codes
 	INVALID_OPERATION = 1,
 	FILE_OP_ERROR,
+	EMPTY_TREE,
 
 	// IX_Manager
 	ATTRIBUTE_NOT_FOUND = 11,
@@ -184,7 +185,7 @@ class IX_IndexHandle {
 //  template <typename KEY>
 //  BTree<KEY>* GetIndex();
   template <typename KEY>
-  RC InitTree(BTree<KEY> **tree);
+  RC InitTree(BTree<KEY> **tree, const unsigned rootPageNum, const unsigned height);
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
   template <typename KEY>
@@ -198,9 +199,9 @@ class IX_IndexHandle {
   template <typename KEY>
   RC GetEntry(BTree<KEY> *index, void *key, const CompOp compOp, RID &rid);
   template <typename KEY>
-  RC InsertEntry(BTree<KEY> **index, void *key, const RID &rid);	// TODO: const key?
+  RC InsertEntry(BTree<KEY> *index, void *key, const RID &rid);
   template <typename KEY>
-  RC DeleteEntry(BTree<KEY> **tree, void* key, const RID &rid);
+  RC DeleteEntry(BTree<KEY> *tree, void* key, const RID &rid);
   template <typename KEY>
   RC GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid);
   template <typename KEY>
@@ -209,8 +210,8 @@ class IX_IndexHandle {
  private:
   PF_FileHandle *_pf_handle;
   AttrType _key_type;
-  unsigned _height;
-  unsigned _root_page_num;
+//  unsigned _height;
+//  unsigned _root_page_num;
   unsigned _free_page_num;
 
   BTree<int> *_int_index;

@@ -171,9 +171,8 @@ BTree<KEY>::BTree()
 template <typename KEY>
 BTree<KEY>::BTree(const unsigned order, IX_IndexHandle *ixHandle,
 		BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType))
-		: _order(order), _height(1), _func_ReadNode(ixHandle, func)
+		: _root(NULL), _order(order), _height(1), _func_ReadNode(ixHandle, func)
 {
-	InitRootNode(NodeType(1));
 }
 
 template <typename KEY>
@@ -1035,12 +1034,17 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 template <typename KEY>
 RC BTree<KEY>::SearchEntry(const KEY key, BTreeNode<KEY> **leafNode, unsigned &pos)
 {
+	if (this->_root == NULL)
+		return EMPTY_TREE;
 	return SearchNode(this->_root, key, this->_height, leafNode, pos);
 }
 
 template <typename KEY>
 RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 {
+	if (this->_root == NULL)	// the tree must be empty, otherwise the root should be already initialized in constructor
+		InitRootNode(NodeType(1));
+
 	BTreeNode<KEY> *leafNode;
 	unsigned pos;
 	RC rc = SearchEntry(key, &leafNode, pos);
@@ -1129,6 +1133,12 @@ RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 template <typename KEY>
 RC BTree<KEY>::DeleteEntry(const KEY key, const RID &rid)
 {
+	if (this->_root == NULL)
+	{
+		IX_PrintError(INVALID_OPERATION);
+		return INVALID_OPERATION;
+	}
+
 	int oldchildPos = -1;
 	//cout<<"the height of the tree is: "<<this->_height<<endl;
 	if(this->_root->type == LEAF_NODE)
@@ -1204,16 +1214,23 @@ template <typename KEY>
 KEY* BTree<KEY>::GetMinKey()
 {
 	KEY* key = NULL;
-	BTreeNode<KEY> *node = this->_root;
-	for (unsigned index = this->_height; index > 1; index--)
+	if (this->_root != NULL)
 	{
-		NodeType nodeType = index > 2 ? NodeType(0) : NodeType(1);
-		node = this->_func_ReadNode(node->childrenPageNums[0], nodeType);
-	}
+		BTreeNode<KEY> *node = this->_root;
+		for (unsigned index = this->_height; index > 1; index--)
+		{
+			if (node->children[0] == NULL)
+			{
+				NodeType nodeType = index > 2 ? NodeType(0) : NodeType(1);
+				node->children[0] = this->_func_ReadNode(node->childrenPageNums[0], nodeType);
+			}
+			node = node->children[0];
+		}
 
-	key = &(node->keys[0]);
-	if (DEBUG)
-		cout << "BTree<KEY>::GetMinKey - Minimum key in current index is " << *key << "." << endl;
+		key = &(node->keys[0]);
+		if (DEBUG)
+			cout << "BTree<KEY>::GetMinKey - Minimum key in current index is " << *key << "." << endl;
+	}
 	return key;
 }
 
@@ -1552,16 +1569,16 @@ RC IX_IndexHandle::WriteDeletedNodes(const vector<unsigned> &_deleted_pagenums)
 }
 
 template <typename KEY>
-RC IX_IndexHandle::InitTree(BTree<KEY> **tree)
+RC IX_IndexHandle::InitTree(BTree<KEY> **tree, const unsigned rootPageNum = 0, const unsigned height = 0)
 {
 	// initialize tree
-	if (this->_height > 0)	// read root from file
+	if (height > 0)	// read root from file
 	{
 		if (DEBUG)
-			cout << "IX_IndexHandle::InitTree - Reading the root [at page " << this->_root_page_num << "] for a tree of height " << this->_height << "." << endl;
-		NodeType rootNodeType = this->_height == 1 ? NodeType(1) : NodeType(0);
-		BTreeNode<KEY> *root = ReadNode<KEY>(this->_root_page_num, rootNodeType);
-		*tree = new BTree<KEY>(DEFAULT_ORDER, root, this->_height, this, &IX_IndexHandle::ReadNode<KEY>);
+			cout << "IX_IndexHandle::InitTree - Reading the root [at page " << rootPageNum << "] for a tree of height " << height << "." << endl;
+		NodeType rootNodeType = height == 1 ? NodeType(1) : NodeType(0);
+		BTreeNode<KEY> *root = ReadNode<KEY>(rootPageNum, rootNodeType);	// TODO: can be postponed to InitRootNode
+		*tree = new BTree<KEY>(DEFAULT_ORDER, root, height, this, &IX_IndexHandle::ReadNode<KEY>);
 	}
 	else	// create an empty tree
 	{
@@ -1585,9 +1602,11 @@ RC IX_IndexHandle::LoadMetadata()
 	}
 	unsigned offset = 0;
 
-	memcpy(&this->_root_page_num, (char *)page + offset, 4);
+	unsigned rootPageNum = 0;
+	unsigned height = 0;
+	memcpy(&rootPageNum, (char *)page + offset, 4);
 	offset += 4;
-	memcpy(&this->_height, (char *)page + offset, 4);
+	memcpy(&height, (char *)page + offset, 4);
 	offset += 4;
 	memcpy(&this->_free_page_num, (char *)page + offset, 4);
 	offset += 4;
@@ -1597,18 +1616,25 @@ RC IX_IndexHandle::LoadMetadata()
 	if (DEBUG)
 	{
 		cout << "IX_IndexHandle::LoadMetadata - Loaded meta-data from index file:" << endl;
-		cout << "	Root page #: " << this->_root_page_num << endl;
-		cout << "	Height of index tree: " << this->_height << endl;
+		cout << "	Root page #: " << rootPageNum << endl;
+		cout << "	Height of index tree: " << height << endl;
 		cout << "	Free page #: " << this->_free_page_num << endl;
 		cout << "	Key type: " << this->_key_type << endl;
 	}
-	return SUCCESS;
+
+	// initialize corresponding B+ tree index
+	if (this->_key_type == TypeInt)
+		rc = this->InitTree(&(this->_int_index), rootPageNum, height);
+	else if (this->_key_type == TypeReal)
+		rc = this->InitTree(&(this->_float_index), rootPageNum, height);
+	return rc;
 }
 
 template <typename KEY>
 RC IX_IndexHandle::UpdateMetadata(const BTree<KEY> *tree)
 {
-	return WriteMetadata(*(this->_pf_handle), tree->GetRoot()->pageNum,
+	unsigned rootPageNum = tree->GetRoot() == NULL ? 0 : tree->GetRoot()->pageNum;
+	return WriteMetadata(*(this->_pf_handle), rootPageNum,
 			tree->GetHeight(), this->_free_page_num, this->_key_type);
 }
 
@@ -1617,52 +1643,36 @@ RC IX_IndexHandle::UpdateMetadata(const BTree<KEY> *tree)
 /* ================== Private Functions Begin ================== */
 
 template <typename KEY>
-RC IX_IndexHandle::InsertEntry(BTree<KEY> **index, void *key, const RID &rid)
+RC IX_IndexHandle::InsertEntry(BTree<KEY> *index, void *key, const RID &rid)
 {
 	const KEY theKey = *(KEY *)key;
 
-	if (*index == NULL)
-	{
-		RC rc = this->InitTree(index);
-		if (rc != SUCCESS)
-			return rc;
-	}
-
-	RC rc = (*index)->InsertEntry(theKey, rid);
+	RC rc = index->InsertEntry(theKey, rid);
 	if (rc != SUCCESS)
 		return rc;
 
-	rc = this->WriteNodes((*index)->GetUpdatedNodes());
-	(*index)->ClearPendingNodes();
+	rc = this->WriteNodes(index->GetUpdatedNodes());
+	index->ClearPendingNodes();
 
 	if (DEBUG)
 	{
 		cout << "IX_IndexHandle::InsertEntry - Print tree:" << endl;
-		PrintTree(*index);
+		PrintTree(index);
 	}
 	return rc;
 }
 
 template <typename KEY>
-RC IX_IndexHandle::DeleteEntry(BTree<KEY> **tree, void* key, const RID &rid)
+RC IX_IndexHandle::DeleteEntry(BTree<KEY> *tree, void* key, const RID &rid)
 {
 	const KEY theKey = *(KEY *)key;
 
-	if (*tree == NULL)
-	{
-		RC rc = this->InitTree(tree);
-		if (rc != SUCCESS)
-			return rc;
-	}
-
-	RC rc = (*tree)->DeleteEntry(theKey, rid);
+	RC rc = tree->DeleteEntry(theKey, rid);
 	if (rc != SUCCESS)
-	{
 		return rc;
-	}
 
-	rc = this->WriteDeletedNodes((*tree)->GetDeletedPageNums());
-	(*tree)->ClearPendingNodes();
+	rc = this->WriteDeletedNodes(tree->GetDeletedPageNums());
+	tree->ClearPendingNodes();
 	return rc;
 }
 
@@ -1779,11 +1789,11 @@ RC IX_IndexHandle::InsertEntry(void *key, const RID &rid)
 	RC rc = SUCCESS;
 	if (this->_key_type == TypeInt)
 	{
-		rc = this->InsertEntry(&(this->_int_index), key, rid);
+		rc = this->InsertEntry(this->_int_index, key, rid);
 	}
 	if (this->_key_type == TypeReal)
 	{
-		rc = this->InsertEntry(&(this->_float_index), key, rid);
+		rc = this->InsertEntry(this->_float_index, key, rid);
 	}
 
 	if (rc != SUCCESS)
@@ -1800,11 +1810,11 @@ RC IX_IndexHandle::DeleteEntry(void *key, const RID &rid)
 	RC rc = SUCCESS;
     if ( _key_type == TypeInt )
 	{
-    	rc = DeleteEntry(&this->_int_index, key, rid);
+    	rc = DeleteEntry(this->_int_index, key, rid);
 	}
 	else if ( _key_type == TypeReal )
 	{
-		rc = DeleteEntry(&this->_float_index, key, rid);
+		rc = DeleteEntry(this->_float_index, key, rid);
 	}
 
     if (rc != SUCCESS)
@@ -1844,11 +1854,15 @@ RC IX_IndexHandle::GetMinKey(void *key)
     if (this->_key_type == TypeInt)
 	{
     	int* iKey = this->_int_index->GetMinKey();
+    	if (iKey == NULL)
+    		return EMPTY_TREE;
     	memcpy(key, iKey, 4);
 	}
 	else if (this->_key_type == TypeReal)
 	{
 		float* fKey = this->_float_index->GetMinKey();
+    	if (fKey == NULL)
+    		return EMPTY_TREE;
 		memcpy(key, fKey, 4);
 	}
     return SUCCESS;
@@ -1998,7 +2012,14 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 {
 	if (this->compOp == NO_OP || this->compOp == NE_OP)
 	{
-		this->indexHandle->GetMinKey(this->keyValue);
+		RC rc = this->indexHandle->GetMinKey(this->keyValue);
+		if (rc != SUCCESS)
+		{
+			if (rc == EMPTY_TREE)
+				return END_OF_SCAN;
+			else
+				return rc;
+		}
 		this->compOp = GE_OP;
 	}
 
