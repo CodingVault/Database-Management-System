@@ -930,6 +930,7 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 		if( key == Node->keys[i] && Node->rids[i].pageNum ==  rid.pageNum
 				&& Node->rids[i].slotNum == rid.slotNum )
 		{
+			if (DEBUG)
 			    cout<<"find the key in the leaf node and delete it successfully!"<<endl;
 			Node->keys.erase(Node->keys.begin()+i);
 			Node->rids.erase(Node->rids.begin()+i);
@@ -1827,6 +1828,8 @@ RC IX_IndexHandle::GetEntry(BTree<KEY> *index, void *key, const CompOp compOp, R
 	BTreeNode<KEY> *leafNode;
 	unsigned pos = 0;
 	RC rc = index->SearchEntry(theKey, &leafNode, pos);
+	if (rc == EMPTY_TREE)
+		return rc;
 	if (rc != SUCCESS && rc != ENTRY_NOT_FOUND)
 	{
 		IX_PrintError(SEARCH_ENTRY_ERROR);
