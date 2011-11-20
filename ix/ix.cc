@@ -13,11 +13,7 @@ PF_Manager* IX_Manager::_pf_manager = 0;
 
 RC GetAttrType(const string tableName, const string attributeName, AttrType &attrType)
 {
-	const string condAttr = "COLUMN_NAME";
-	const string projAttr = "TYPE";
-
 	RM *rm = RM::Instance();
-	RM_ScanIterator rmsi;
     vector<Attribute> attributes;
     RC rc = rm->getAttributes(tableName, attributes);
     if (rc != SUCCESS)
@@ -171,7 +167,7 @@ BTree<KEY>::BTree()
 template <typename KEY>
 BTree<KEY>::BTree(const unsigned order, IX_IndexHandle *ixHandle,
 		BTreeNode<KEY>* (IX_IndexHandle::*func)(const unsigned, const NodeType))
-		: _root(NULL), _order(order), _height(1), _func_ReadNode(ixHandle, func)
+		: _root(NULL), _order(order), _height(0), _func_ReadNode(ixHandle, func)
 {
 }
 
@@ -524,16 +520,19 @@ void BTree<KEY>::RedistributeLeafNode( BTreeNode<KEY>* Node, BTreeNode<KEY>* sib
 	//cout<<"======redistribute begins===="<<endl;
     unsigned int i = 0;
     unsigned int even_no = 0;
-    for(i = 0; i < siblingNode->keys.size(); i++)
-    		{
-    			cout<<" <"<<siblingNode->keys[i]<<"> ";
-    		}
-    		cout<<" ";
-    		for(i = 0; i < Node->keys.size(); i++)
-    		{
-    			cout<<" <"<<Node->keys[i]<<"> ";
-    		}
-    		cout<<endl;
+    if (DEBUG)
+    {
+		for(i = 0; i < siblingNode->keys.size(); i++)
+		{
+			cout<<" <"<<siblingNode->keys[i]<<"> ";
+		}
+		cout<<" ";
+		for(i = 0; i < Node->keys.size(); i++)
+		{
+			cout<<" <"<<Node->keys[i]<<"> ";
+		}
+		cout<<endl;
+    }
 	if( Node->pos > siblingNode->pos )
 	{// left sibling
 		//cout<<"the current node has "<<Node->keys.size()<<" items and its left sibling has"<<siblingNode->keys.size()<<endl;
@@ -1093,7 +1092,10 @@ template <typename KEY>
 RC BTree<KEY>::InsertEntry(const KEY key, const RID &rid)
 {
 	if (this->_root == NULL)	// the tree must be empty, otherwise the root should be already initialized in constructor
+	{
 		InitRootNode(NodeType(1));
+		this->_height = 1;
+	}
 
 	BTreeNode<KEY> *leafNode;
 	unsigned pos;
