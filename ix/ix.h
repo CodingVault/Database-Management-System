@@ -116,12 +116,13 @@ protected:
 	RC DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KEY key, const RID &rid,int& oldchildPos);
 	RC DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid, int& oldchildPos);
 
-	void RedistributeNLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
+	void RedistributeNLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode,int nodeLevel);
 	void RedistributeLeafNode(BTreeNode<KEY>* Node,BTreeNode<KEY>* siblingNode);
 	void MergeNode(BTreeNode<KEY>* leftNode,BTreeNode<KEY>* rightNode);
 
 private:
 	void InitRootNode(const NodeType nodeType);
+	KEY* GetMinKey(BTreeNode<KEY>* subTree,unsigned subTreeHeight);
 
 private:
 	BTreeNode<KEY>* _root;
