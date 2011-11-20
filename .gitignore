@@ -6,4 +6,5 @@ b
 *.o
 *test
 *.bak
+*.dat
 *.idx

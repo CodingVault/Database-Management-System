@@ -1191,10 +1191,6 @@ RC BTree<KEY>::DeleteEntry(const KEY key, const RID &rid)
 
 	int oldchildPos = -1;
 	RC rc = 0;
-	if(this->_root == NULL)
-	{
-		return DELETE_ENTRY_ERROR;
-	}
 	if(this->_root->type == LEAF_NODE)
 	{
 		rc = DeleteLeafNode(this->_root,key,rid,oldchildPos);
