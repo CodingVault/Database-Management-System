@@ -3,9 +3,9 @@
 
 #include <vector>
 
-#include "pf/pf.h"
-#include "rm/rm.h"
-#include "ix/ix.h"
+#include "../pf/pf.h"
+#include "../rm/rm.h"
+#include "../ix/ix.h"
 
 # define QE_EOF (-1)  // end of the index scan
 
