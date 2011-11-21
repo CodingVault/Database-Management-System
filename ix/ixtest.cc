@@ -108,6 +108,8 @@ void ixTest2(unsigned round,unsigned maxTupleNum)
 	}
 	rc = ix_manager->CloseIndex(ix_handle);
 	assert(rc == SUCCESS);
+	cout << endl << "Inserted " << maxTupleNum << " entries..." << endl << endl << endl;
+
 	//unsigned* P = NULL;
 	unsigned tempNum1 = 0;
 	unsigned tempNum2 = 0;
@@ -115,7 +117,7 @@ void ixTest2(unsigned round,unsigned maxTupleNum)
 	for(i = 0; i < round; i++)
 	{
 		cout<<"+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"<<endl;
-		cout<<"in the "<<i<<"th round"<<endl;
+		cout<<"==================round "<<i<<endl;
 		rc = ix_manager->OpenIndex("tbl_employee", "Age", ix_handle);
 		assert(rc == SUCCESS);
 		tempNum1 = rand()%20 + 10; // the number of operation in each round
@@ -150,6 +152,7 @@ void ixTest2(unsigned round,unsigned maxTupleNum)
 				rid.pageNum = tempNum2;
 				rid.slotNum = tempNum2;
 				rc = ix_handle.DeleteEntry(&tempNum2, rid);
+				cout << "DONE" << endl;
 				if(btree_i != btree.end()) // the key is in the tree, deletion should succeed
 				{
 					btree.erase(tempNum2);
@@ -164,7 +167,8 @@ void ixTest2(unsigned round,unsigned maxTupleNum)
 				cout<<"---------------------------"<<endl;
 			}
 		}
-		cout<<"the "<<i<<"th round OK!"<<endl;
+		cout<<"==================round ["<<i<<"] OK!"<<endl;
+		cout<<"+++++++++++++++++++++++++++++++++++++++++++++++++++++++++"<<endl<<endl;
 		rc = ix_manager->CloseIndex(ix_handle);
 		assert(rc == SUCCESS);
 	}
@@ -260,7 +264,7 @@ int main()
   RM *rm = RM::Instance();
   createTable(rm, "tbl_employee");
 
-  //ixTest1(10000);
+//  ixTest1(10000);
   ixTest2(100, 10000);
 
 

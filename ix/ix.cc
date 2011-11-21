@@ -51,8 +51,7 @@ RC WriteMetadata(PF_FileHandle &handle, const unsigned rootPageNum,
 	return SUCCESS;
 }
 
-template <typename KEY>
-RC ExistInVector(const vector<KEY>& keys, const KEY& key )
+RC ExistInVector(const vector<unsigned>& keys, const unsigned& key )
 {
 	for(unsigned i = 0; i < keys.size(); i++)
 	{
@@ -62,6 +61,16 @@ RC ExistInVector(const vector<KEY>& keys, const KEY& key )
 		}
 	}
 	return 0;
+}
+
+template <typename KEY>
+int NodeExists(const vector<BTreeNode<KEY>*> &nodes, const int pageNum)
+{
+	for(unsigned i = 0; i < nodes.size(); i++)
+		if(pageNum == nodes[i]->pageNum)
+			return i;
+
+	return -1;
 }
 
 template <typename KEY>
@@ -643,11 +652,11 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 	if(DEBUG)
 	{
 	    cout<<"delete in non leaf node"<<endl;
-	    for(i = 0; i < Node->keys.size(); i++)
-	    {
-	    	cout<<" <"<<Node->keys[i]<<"> ";
-	    }
-	    cout<<endl;
+		for(i = 0; i < Node->keys.size(); i++)
+		{
+			cout<<" <"<<Node->keys[i]<<"> ";
+		}
+		cout<<endl;
 	}
 	/*********************************************************************************/
 	//find the children to go down
@@ -696,7 +705,6 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 			break;
 		}
 	}
-
 
 	/**************************************************************************************/
     // case 1 : the child is not deleted
@@ -776,6 +784,10 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 			this->_updated_nodes.push_back(this->_root);// update the new root
 			if(Node->pageNum > 0 && !ExistInVector( _deleted_pagenums, (unsigned)Node->pageNum ))
 			{
+				int pos = NodeExists(_updated_nodes, Node->pageNum);
+				if (pos != -1)
+					_updated_nodes.erase(_updated_nodes.begin() + pos);
+
 				this->_deleted_pagenums.push_back(Node->pageNum);// delete the old root
 				delete Node;
 				Node = NULL;
@@ -869,7 +881,6 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 		this->_updated_nodes.push_back(Node);
 		this->_updated_nodes.push_back(siblingNode);
 		this->_updated_nodes.push_back(Node->parent);
-		return SUCCESS;
 	}
 	else
 	{// merge the current node with its sibling node
@@ -877,7 +888,6 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 		    cout<<" need to merge"<<endl;
 		BTreeNode<KEY> * leftNode;
 		BTreeNode<KEY> * rightNode;
-
 		if( Node->pos < siblingNode->pos)
 		{// right sibling
 			leftNode = Node;
@@ -889,6 +899,7 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 			leftNode = siblingNode;
 			rightNode = Node;
 		}
+
 		MergeNode(leftNode,rightNode);
 		//cout<<"merge into the current non leaf node"<<endl;
 		//cout<<"after merge, the node has "<<Node->children.size()<<" children"<<endl;
@@ -899,16 +910,20 @@ RC BTree<KEY>::DeleteNLeafNode(BTreeNode<KEY>* Node,unsigned nodeLevel, const KE
 		//cout<<"the non leaf node at position "<<oldchildPos<< " is deleted"<<endl;
 		this->_updated_nodes.push_back(leftNode);
 		this->_updated_nodes.push_back(leftNode->parent);
-		if(rightNode->pageNum > 0 && !ExistInVector( _deleted_pagenums, (unsigned)(rightNode->pageNum)))
+		if(rightNode->pageNum > 0 && !ExistInVector(_deleted_pagenums, (unsigned)(rightNode->pageNum)))
 		{
+			int pos = NodeExists(_updated_nodes, rightNode->pageNum);
+			if (pos != -1)
+				_updated_nodes.erase(_updated_nodes.begin() + pos);
+
 			this->_deleted_pagenums.push_back(rightNode->pageNum);
 		    delete rightNode;
 		}
 		//cout<<"Now there are "<<this->_deleted_pagenums.size()<<" free pages in the B Tree!"<<endl;
 		leftNode = NULL;
 		rightNode = NULL;
-		return SUCCESS;
 	}
+	return SUCCESS;
 }
 
 template <typename KEY>
@@ -927,7 +942,6 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 	//cout<<"this leaf node has "<<Node->keys.size()<<" items"<<endl;
 	/****************************************************************************************/
 	// delete the entry in the leaf node
-
 	unsigned keysNum = 0;
 	keysNum = Node->keys.size();
 	for( i = 0; i < keysNum; i++ )
@@ -963,9 +977,12 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 		{// the tree becomes empty
 			if( Node->pageNum > 0 && !ExistInVector( _deleted_pagenums,(unsigned) Node->pageNum ))
 			{
+				int pos = NodeExists(_updated_nodes, Node->pageNum);
+				if (pos != -1)
+					_updated_nodes.erase(_updated_nodes.begin() + pos);
+
 				this->_deleted_pagenums.push_back(Node->pageNum);
 				delete Node;
-
 			}
 			this->_root = NULL;
 			this->_height = 0;
@@ -981,7 +998,6 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 	// case 3 : delete normally in leaf node
 	if( Node->keys.size() >= this->_order )
 	{// usual case, delete the child node
-
 		deletedChildPos = -1;
 		this->_updated_nodes.push_back(Node);
 		if(DEBUG)
@@ -1075,6 +1091,10 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 		deletedChildPos = rightNode->pos;
 		if(rightNode->pageNum > 0 && !ExistInVector( _deleted_pagenums, (unsigned)(rightNode->pageNum)))
 	    {
+			int pos = NodeExists(_updated_nodes, rightNode->pageNum);
+			if (pos != -1)
+				_updated_nodes.erase(_updated_nodes.begin() + pos);
+
 			this->_deleted_pagenums.push_back(rightNode->pageNum);
 			delete rightNode;
 		}
@@ -1771,6 +1791,21 @@ RC IX_IndexHandle::DeleteEntry(BTree<KEY> *tree, void* key, const RID &rid)
 	if (rc != SUCCESS)
 		return rc;
 
+	// remove from UpdatedNodes list those nodes have already been deleted
+	for (unsigned i = 0; i < tree->GetDeletedPageNums().size(); i++)
+	{
+		for (unsigned j = 0; j < tree->GetUpdatedNodes().size(); j++)
+		{
+			unsigned updatedPageNum = 0;
+			if (tree->GetUpdatedNodes()[j]->pageNum >= 0)
+				updatedPageNum = tree->GetUpdatedNodes()[j]->pageNum;
+			if (updatedPageNum == tree->GetDeletedPageNums()[i])
+			{
+				tree->GetUpdatedNodes().erase(tree->GetUpdatedNodes().begin() + j);
+				break;
+			}
+		}
+	}
 	rc = this->WriteNodes(tree->GetUpdatedNodes());
 	rc = this->WriteDeletedNodes(tree->GetDeletedPageNums());
 	tree->ClearPendingNodes();
