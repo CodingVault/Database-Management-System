@@ -14,6 +14,7 @@ using namespace std;
 typedef enum{ MIN = 0, MAX, SUM, AVG, COUNT } AggregateOp;
 
 
+
 // The following functions use  the following 
 // format for the passed data.
 //    For int and real: use 4 bytes
