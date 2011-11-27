@@ -68,7 +68,7 @@ class TableScan : public Iterator
             }
             // Call rm scan to get iterator
             iter = new RM_ScanIterator();
-            rm.scan(tablename, attrNames, *iter);
+            rm.scan(tablename, "", NO_OP, NULL, attrNames, *iter);
 
             // Store tablename
             this->tablename = tablename;
@@ -81,7 +81,7 @@ class TableScan : public Iterator
             iter->close();
             delete iter;
             iter = new RM_ScanIterator();
-            rm.scan(tablename, attrNames, *iter);
+            rm.scan(tablename, "", NO_OP, NULL, attrNames, *iter);
         };
        
         RC getNextTuple(void *data)
@@ -204,9 +204,13 @@ class Project : public Iterator {
                 const vector<string> &attrNames);           // vector containing attribute names
         ~Project();
         
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        Iterator *_iter;
+        vector<string> _attrNames;
 };
 
 
