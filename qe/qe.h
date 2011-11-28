@@ -7,7 +7,9 @@
 #include "../rm/rm.h"
 #include "../ix/ix.h"
 
-# define QE_EOF (-1)  // end of the index scan
+#define QE_EOF (-1)  // end of the index scan
+#define INCOMPLIANCE (-2)
+#define BUFF_SIZE PF_PAGE_SIZE
 
 using namespace std;
 
@@ -26,6 +28,10 @@ struct Value {
     void     *data;         // value                       
 };
 
+struct Buff {
+	AttrLength length;
+	void       *data;
+};
 
 struct Condition {
     string lhsAttr;         // left-hand side attribute                     
@@ -69,20 +75,20 @@ class TableScan : public Iterator
             }
             // Call rm scan to get iterator
             iter = new RM_ScanIterator();
-            rm.scan(tablename, attrNames, *iter);
+            rm.scan(tablename, "", NO_OP, NULL, attrNames, *iter);
 
             // Store tablename
             this->tablename = tablename;
             if(alias) this->tablename = alias;
         };
        
-        // Start a new iterator given the new compOp and value
+        // Start a new iterator
         void setIterator()
         {
             iter->close();
             delete iter;
             iter = new RM_ScanIterator();
-            rm.scan(tablename, attrNames, *iter);
+            rm.scan(tablename, "", NO_OP, NULL, attrNames, *iter);
         };
        
         RC getNextTuple(void *data)
@@ -110,6 +116,7 @@ class TableScan : public Iterator
         ~TableScan() 
         {
             iter->close();
+            delete iter;
         };
 };
 
@@ -179,7 +186,11 @@ class IndexScan : public Iterator
         
         ~IndexScan() 
         {
-            iter->CloseScan();
+            if(iter != NULL)
+            {
+            	iter->CloseScan();
+                delete iter;
+            }
         };
 };
 
@@ -205,9 +216,14 @@ class Project : public Iterator {
                 const vector<string> &attrNames);           // vector containing attribute names
         ~Project();
         
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+
+    private:
+        Iterator *_iter;
+        vector<string> _attrNames;
+    	vector<Attribute> _attrs;
 };
 
 
@@ -221,9 +237,26 @@ class NLJoin : public Iterator {
         );
         ~NLJoin();
         
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+
+    protected:
+        unsigned getLeftLength();
+        unsigned getRightLength(void *rightTuple);
+        RC getLeftValue();
+        void getRightValue(void *rightTuple, void *value);
+
+    private:
+        Iterator *_left;
+        TableScan *_right;
+        Condition _condition;
+        unsigned _numPages;
+    	vector<Attribute> _leftAttrs;
+    	vector<Attribute> _rightAttrs;
+        AttrType _attrType;
+        void *_leftTuple;
+        void *_leftValue;
 };
 
 

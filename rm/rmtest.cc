@@ -670,67 +670,69 @@ void secA_7(const string tablename)
 }
 
 
-//void secA_8(const string tablename)
-//{
-//    // Functions Tested
-//    // 1. Simple scan **
-//    cout << "****In Test Case 8****" << endl;
-//
-//    RID rid;
-//    int tuple_size = 0;
-//    int num_records = 5;
-//    void *tuple;
-//    void *data_returned = malloc(100);
-//
-//    int sizes[num_records];
-//    RID rids[num_records];
-//    vector<char *> tuples;
-//
-//    RC rc = 0;
-//    for(int i = 0; i < num_records; i++)
-//    {
-//        tuple = malloc(100);
-//
-//        // Insert Tuple
-//        float height = (float)i;
-//        prepareTuple(6, "Tester", 20+i, height, 123, tuple, &tuple_size);
-//        rc = rm->insertTuple(tablename, tuple, rid);
-//        assert(rc == success);
-//
-//        tuples.push_back((char *)tuple);
-//        sizes[i] = tuple_size;
-//        rids[i] = rid;
-//    }
-//    cout << "After Insertion!" << endl;
-//
-//    // Set up the iterator
-//    RM_ScanIterator rmsi;
-//    string attr = "Age";
-//    vector<string> attributes;
-//    attributes.push_back(attr);
-//    rc = rm->scan(tablename, "", NO_OP, NULL, attributes, rmsi);
-//    assert(rc == success);
-//
-//    cout << "Scanned Data:" << endl;
-//
-//    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
-//    {
-//        cout << "Age: " << *(int *)data_returned << endl;
-//    }
-//    rmsi.close();
-//
-//    // Deleta Table
-//    rc = rm->deleteTable(tablename);
-//    assert(rc == success);
-//
-//    free(data_returned);
-//    for(int i = 0; i < num_records; i++)
-//    {
-//        free(tuples[i]);
-//    }
-//
-//    return;
-//}
+void secA_8(const string tablename)
+{
+    // Functions Tested
+    // 1. Simple scan **
+    cout << "****In Test Case 8****" << endl;
+
+    RID rid;
+    int tuple_size = 0;
+    int num_records = 5;
+    void *tuple;
+    void *data_returned = malloc(100);
+
+    int sizes[num_records];
+    RID rids[num_records];
+    vector<char *> tuples;
+
+    RC rc = 0;
+    for(int i = 0; i < num_records; i++)
+    {
+        tuple = malloc(100);
+
+        // Insert Tuple
+        float height = (float)i;
+        prepareTuple(6, "Tester", 20+i, height, 123, tuple, &tuple_size);
+        rc = rm->insertTuple(tablename, tuple, rid);
+        assert(rc == success);
+
+        tuples.push_back((char *)tuple);
+        sizes[i] = tuple_size;
+        rids[i] = rid;
+    }
+    cout << "After Insertion!" << endl;
+
+    // Set up the iterator
+    RM_ScanIterator rmsi;
+    string attr = "Age";
+    vector<string> attributes;
+    attributes.push_back(attr);
+    rc = rm->scan(tablename, "", NO_OP, NULL, attributes, rmsi);
+    assert(rc == success);
+
+    cout << "Scanned Data:" << endl;
+
+    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
+    {
+        cout << "Age: " << *(int *)data_returned << endl;
+    }
+    rmsi.close();
+
+    // Deleta Table
+    rc = rm->deleteTable(tablename);
+    assert(rc == success);
+
+    free(data_returned);
+    for(int i = 0; i < num_records; i++)
+    {
+        free(tuples[i]);
+    }
+
+    cout << endl << "****Test case 8 passed****" << endl << endl;
+
+    return;
+}
 
 
 void secA_9(const string tablename, vector<RID> &rids, vector<int> &sizes)
@@ -810,53 +812,53 @@ void secA_10(const string tablename, const vector<RID> &rids, const vector<int> 
 }
 
 
-//void secA_11(const string tablename, vector<RID> &rids, vector<int> &sizes)
-//{
-//    // Functions Tested:
-//    // 1. update tuple
-//    // 2. read tuple
-//    cout << "****In Test case 11****" << endl;
-//
-//    RC rc = 0;
-//    void *tuple = malloc(1000);
-//    void *data_returned = malloc(1000);
-//
-//    // Update the first 1000 records
-//    int size = 0;
-//    for(int i = 0; i < 1000; i++)
-//    {
-//        memset(tuple, 0, 1000);
-//        RID rid = rids[i];
-//
-//        prepareLargeTuple(i+10, tuple, &size);
-//        rc = rm->updateTuple(tablename, tuple, rid);
-//        assert(rc == success);
-//
-//        sizes[i] = size;
-//        rids[i] = rid;
-//    }
-//    cout << "Updated!" << endl;
-//
-//    // Read the recrods out and check integrity
-//    for(int i = 0; i < 1000; i++)
-//    {
-//        memset(tuple, 0, 1000);
-//        memset(data_returned, 0, 1000);
-//        prepareLargeTuple(i+10, tuple, &size);
-//        rc = rm->readTuple(tablename, rids[i], data_returned);
-//        assert(rc == success);
-//
-//        if(memcmp(data_returned, tuple, sizes[i]) != 0)
-//        {
-//            cout << "****Test case 11 failed****" << endl << endl;
-//            return;
-//        }
-//    }
-//    cout << "****Test case 11 passed****" << endl << endl;
-//
-//    free(tuple);
-//    free(data_returned);
-//}
+void secA_11(const string tablename, vector<RID> &rids, vector<int> &sizes)
+{
+    // Functions Tested:
+    // 1. update tuple
+    // 2. read tuple
+    cout << "****In Test case 11****" << endl;
+
+    RC rc = 0;
+    void *tuple = malloc(1000);
+    void *data_returned = malloc(1000);
+
+    // Update the first 1000 records
+    int size = 0;
+    for(int i = 0; i < 1000; i++)
+    {
+        memset(tuple, 0, 1000);
+        RID rid = rids[i];
+
+        prepareLargeTuple(i+10, tuple, &size);
+        rc = rm->updateTuple(tablename, tuple, rid);
+        assert(rc == success);
+
+        sizes[i] = size;
+        rids[i] = rid;
+    }
+    cout << "Updated!" << endl;
+
+    // Read the recrods out and check integrity
+    for(int i = 0; i < 1000; i++)
+    {
+        memset(tuple, 0, 1000);
+        memset(data_returned, 0, 1000);
+        prepareLargeTuple(i+10, tuple, &size);
+        rc = rm->readTuple(tablename, rids[i], data_returned);
+        assert(rc == success);
+
+        if(memcmp(data_returned, tuple, sizes[i]) != 0)
+        {
+            cout << "****Test case 11 failed****" << endl << endl;
+            return;
+        }
+    }
+    cout << "****Test case 11 passed****" << endl << endl;
+
+    free(tuple);
+    free(data_returned);
+}
 
 
 void secA_12(const string tablename, const vector<RID> &rids)
@@ -891,58 +893,59 @@ void secA_12(const string tablename, const vector<RID> &rids)
 }
 
 
-//void secA_13(const string tablename)
-//{
-//    // Functions Tested
-//    // 1. scan
-//    cout << "****In Test case 13****" << endl;
-//
-//    RM_ScanIterator rmsi;
-//    vector<string> attrs;
-//    attrs.push_back("attr5");
-//    attrs.push_back("attr12");
-//    attrs.push_back("attr28");
-//
-//    RC rc = rm->scan(tablename, "", NO_OP, NULL, attrs, rmsi);
-//    assert(rc == success);
-//
-//    RID rid;
-//    int j = 0;
-//    void *data_returned = malloc(1000);
-//
-//    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
-//    {
-//        if(j % 200 == 0)
-//        {
-//            int offset = 0;
-//
-//            cout << "Real Value: " << *(float *)(data_returned) << endl;
-//            offset += 4;
-//
-//            int size = *(int *)((char *)data_returned + offset);
-//            cout << "String size: " << size << endl;
-//            offset += 4;
-//
-//            char *buffer = (char *)malloc(size + 1);
-//            memcpy(buffer, (char *)data_returned + offset, size);
-//            buffer[size] = 0;
-//            offset += size;
-//
-//            cout << "Char Value: " << buffer << endl;
-//
-//            cout << "Integer Value: " << *(int *)((char *)data_returned + offset ) << endl << endl;
-//            offset += 4;
-//
-//            free(buffer);
-//        }
-//        j++;
-//        memset(data_returned, 0, 1000);
-//    }
-//    rmsi.close();
-//    cout << "Total number of records: " << j << endl << endl;
-//
-//    free(data_returned);
-//}
+void secA_13(const string tablename)
+{
+    // Functions Tested
+    // 1. scan
+    cout << "****In Test case 13****" << endl;
+
+    RM_ScanIterator rmsi;
+    vector<string> attrs;
+    attrs.push_back("attr5");
+    attrs.push_back("attr12");
+    attrs.push_back("attr28");
+
+    RC rc = rm->scan(tablename, "", NO_OP, NULL, attrs, rmsi);
+    assert(rc == success);
+
+    RID rid;
+    int j = 0;
+    void *data_returned = malloc(1000);
+
+    while(rmsi.getNextTuple(rid, data_returned) != RM_EOF)
+    {
+        if(j % 200 == 0)
+        {
+            int offset = 0;
+
+            cout << "Real Value: " << *(float *)(data_returned) << endl;
+            offset += 4;
+
+            int size = *(int *)((char *)data_returned + offset);
+            cout << "String size: " << size << endl;
+            offset += 4;
+
+            char *buffer = (char *)malloc(size + 1);
+            memcpy(buffer, (char *)data_returned + offset, size);
+            buffer[size] = 0;
+            offset += size;
+
+            cout << "Char Value: " << buffer << endl;
+
+            cout << "Integer Value: " << *(int *)((char *)data_returned + offset ) << endl << endl;
+            offset += 4;
+
+            free(buffer);
+        }
+        j++;
+        memset(data_returned, 0, 1000);
+    }
+    rmsi.close();
+    cout << "Total number of records: " << j << endl << endl;
+    cout << "****Test case 12 passed****" << endl << endl;
+
+    free(data_returned);
+}
 
 
 void secA_14(const string tablename, const vector<RID> &rids)
@@ -1054,15 +1057,15 @@ void Tests()
 
     // Delete Table
     secA_6("tbl_employee", 6, "Martin", 26, 173.6, 8000);
-    
+
     // Reorganize Page
     createTable("tbl_employee2");
     secA_7("tbl_employee2");
 
     // Simple Scan
-//    createTable("tbl_employee3");
-//    secA_8("tbl_employee3");
-	
+    createTable("tbl_employee3");
+    secA_8("tbl_employee3");
+
 	// Pressure Test
     createLargeTable("tbl_employee4");
 
@@ -1071,23 +1074,24 @@ void Tests()
 
     // Insert Tuple
     secA_9("tbl_employee4", rids, sizes);
+
     // Read Tuple
     secA_10("tbl_employee4", rids, sizes);
 
     // Update Tuple
-//    secA_11("tbl_employee4", rids, sizes);
+    secA_11("tbl_employee4", rids, sizes);
 
     // Delete Tuple
     secA_12("tbl_employee4", rids);
 
     // Scan
-//    secA_13("tbl_employee4");
+    secA_13("tbl_employee4");
 
     // DeleteTuples/Table
     secA_14("tbl_employee4", rids);
-    
+
     // Scan with conditions
-    createTable("tbl_b_employee4");  
+    createTable("tbl_b_employee4");
     secA_15("tbl_b_employee4");
     
     return;

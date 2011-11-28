@@ -2,7 +2,7 @@
 #include <iostream>
 #include <vector>
 
-#define DEBUG true
+#define DEBUG false
 
 RM* RM::_rm = 0;
 PF_Manager* RM::_pfManager = 0;
@@ -122,7 +122,8 @@ unsigned readDirectory(const void *page, Slot *slots)
 	lastValidSlot.offset = 0;
 	lastValidSlot.length = 0;
 	unsigned short count = (PF_PAGE_SIZE - last - PAGE_CONTROL_INFO_LEN) / 6;
-	cout << "RM::readSlotDirectory - Reading " << count << " slot(s) directory info from page." << endl;
+	if (DEBUG)
+		cout << "RM::readSlotDirectory - Reading " << count << " slot(s) directory info from page." << endl;
 	if (last > 0)
 	{
 		for (unsigned index = 0; index < count; index++)
@@ -136,7 +137,7 @@ unsigned readDirectory(const void *page, Slot *slots)
 			if (DEBUG)
 				cout << "RM::readSlotDirectory - Data read: " << slot.flag << "|" << slot.offset << "|" << slot.length << endl;
 
-			if (slot.flag != 3 && slot.offset > lastValidSlot.offset)
+			if (slot.flag != 3 && slot.offset >= lastValidSlot.offset)
 				lastValidSlot = slot;
 		}
 	}
@@ -148,7 +149,8 @@ unsigned readDirectory(const void *page, Slot *slots)
 	short freeSpace = last - empty.offset - PAGE_PRESCRIBED_FREE_SPACE;
 	empty.length = freeSpace >= 0 ? freeSpace : 0;
 	slots[count] = empty;
-	cout << "RM::readSlotDirectory - Empty slot: " << empty.flag << "|" << empty.offset << "|" << empty.length << endl;
+	if (DEBUG)
+		cout << "RM::readSlotDirectory - Empty slot: " << empty.flag << "|" << empty.offset << "|" << empty.length << endl;
 
 	if (DEBUG)
 		report(slots, count);
@@ -160,7 +162,7 @@ unsigned readDirectory(const void *page, Slot *slots)
  *
  * !!! COMPLEX LOGIC !!!
  * If the length of new slot is less than the original one, leave new length in the original slot,
-		and create new slot pointing to the free space left;
+		and create new slot pointing to the free space left (insert the slot info at the end of directory);
  * if it is greater than the original one, update it and move all slots afterward;
  * if they are equal, just update flag, cheers!
  *
@@ -179,15 +181,14 @@ void updateDirectory(Slot *slots, unsigned &count, const unsigned slotNum, const
 	if (discrepancy < 0)		// TODO: HIGH!!! if slotNum = count - 1, merge two tailing free space
 	{
 		Slot empty = slots[count];	// must be retrieved first in case new slot is just the last empty slot
-		Slot newSlot;	// points to free space left
+		Slot newSlot;	// points to free space left after part of the empty slot is occupied
 		newSlot.flag = 0;
 		newSlot.offset = update.offset + size;
-		cout << "Discrepancy: " << discrepancy << endl;
 		newSlot.length = -(discrepancy);
 
 		// if slotNum == count, the new slot info will be transferred to empty slot
 		slots[count] = newSlot;
-		cout << "Adding newSlot " << count << " [size: " << newSlot.length << "] starting from offset [" << newSlot.offset << "]." << endl;
+		cout << "HELPER::updateDirectory - Adding newSlot " << count << " [size: " << newSlot.length << "] starting from offset [" << newSlot.offset << "]." << endl;
 		slots[slotNum] = update;	// must be after newSlot info is written in case slotNum == count
 		if (slotNum == count)
 			empty = newSlot;
@@ -447,11 +448,11 @@ void validateTuple(void *data, unsigned &size, const vector<Attribute> attrs)
 {
 	unsigned fieldsCount = 0;
 	memcpy(&fieldsCount, data, 4);
-	cout << "validateTuple - Validating the record (length: " << size << ") containing " << fieldsCount << " fields for now." << endl;
+	cout << "HELPER::validateTuple - Validating the record (length: " << size << ") containing " << fieldsCount << " fields for now." << endl;
 
 	if (fieldsCount < attrs.size())
 	{
-		cout << "validateTuple - Current count of attributes is " << attrs.size() << "; need to append default value(s)." << endl;
+		cout << "HELPER::validateTuple - Current count of attributes is " << attrs.size() << "; need to append default value(s)." << endl;
 		while (fieldsCount < attrs.size())
 		{
 			appendFields(data, size, attrs[fieldsCount]);
@@ -460,7 +461,7 @@ void validateTuple(void *data, unsigned &size, const vector<Attribute> attrs)
 	}
 
 	memcpy(data, &fieldsCount, 4);
-	cout << "validateTuple - Done validation; " << fieldsCount << " fields in total; record length is " << size << "." << endl;
+	cout << "HELPER::validateTuple - Done validation; " << fieldsCount << " fields in total; record length is " << size << "." << endl;
 }
 
 RC RM::createTable(const string tableName, const vector<Attribute> &attrs)
@@ -800,7 +801,8 @@ RC RM::scan(const string tableName,
 	rm_ScanIterator.setTableName(tableName);
 	rm_ScanIterator.setCondAttr(conditionAttribute);
 	rm_ScanIterator.setCompOp(compOp);
-	rm_ScanIterator.setValue(value);
+	if (value)
+		rm_ScanIterator.setValue(value);
 	rm_ScanIterator.setAttrNames(attributeNames);
 
 	RC rc = rm_ScanIterator.startReading();
@@ -896,6 +898,9 @@ RC RM::initTableAttributes(PF_FileHandle &handle, const char *tableName, const v
 unsigned attrInTable(const void *page, const Slot *directory, const unsigned slotNum, const char *tableName, Attribute &attr)
 {
 	Slot slot = directory[slotNum];
+	if (!slot.flag)
+		return 0;
+
 	char record[slot.length];
 	memcpy(record, (char *)page + slot.offset, slot.length);
 
@@ -1535,11 +1540,12 @@ void projectTuple(const void *tuple, const vector<Attribute> attrs, const vector
 RM_ScanIterator::RM_ScanIterator()
 {
 	this->_reading = false;
-	this->_value = malloc(100);
+	this->_value = NULL;
 }
 RM_ScanIterator::~RM_ScanIterator()
 {
-	free(this->_value);
+	if (this->_value)
+		free(this->_value);
 }
 
 RC RM_ScanIterator::startReading()
@@ -1594,6 +1600,9 @@ void RM_ScanIterator::setValue(const void *value)
 		cerr << "RM_ScanIterator::setValue - Value cannot be changed before the iterator is closed." << endl;
 		return;
 	}
+	if (this->_value)
+		free(this->_value);
+	this->_value = malloc(PF_PAGE_SIZE);
 	strcpy((char* )this->_value, (char *)value);
 }
 
@@ -1626,8 +1635,6 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 	}
 
 	void *page = malloc(PF_PAGE_SIZE);
-	void *tuple = malloc(100);	// TODO: update it!
-	void *recordValue = malloc(20);
 	Slot slots[SLOTS_CAPACITY];
 	unsigned count = 0;
 
@@ -1641,6 +1648,8 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 		unsigned slotNum = this->_slotNum + 1;
 		while (slotNum < count)
 		{
+			void *tuple = malloc(PF_PAGE_SIZE);	// TODO: update it!
+			void *recordValue = malloc(PF_PAGE_SIZE);
 			cout << "RM_ScanIterator::getNextTuple - Analyzing slot [" << pageNum << ":" << slotNum << "]." << endl;
 			RID idCopy;
 			idCopy.pageNum = pageNum;
@@ -1658,30 +1667,39 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 			{
 				cout << "RM_ScanIterator::getNextTuple - Performing comparison CompOp: " << this->_compOp << " on attribute [" << this->_conditionAttribute << "]." << endl;
 				getAttributeValue(tuple, attrs, this->_conditionAttribute.c_str(), recordValue);
-				if (type == AttrType(2))
-				{
-					unsigned len = 0;
-					char end = '\0';
 
-					memcpy(&len, recordValue, 4);
-					memcpy(recordValue, (char *)recordValue + 4, len);
-					memcpy((char *)recordValue + 4 + len, &end, 1);
-
-					memcpy(&len, this->_value, 4);
-					memcpy(this->_value, (char *)this->_value + 4, len);
-					memcpy((char *)this->_value + 4 + len, &end, 1);
-				}
-				if (!compare(recordValue, this->_compOp, this->_value, type))
+				if (this->_value != NULL)
 				{
-					cout << "RM_ScanIterator::getNextTuple - Data at [" << pageNum << ":" << slotNum << "] does not meet criterion." << endl;
-					slotNum++;
-					continue;
+					if (type == AttrType(2))
+					{
+						unsigned len = 0;
+						char end = '\0';
+
+						memcpy(&len, recordValue, 4);
+						memcpy(recordValue, (char *)recordValue + 4, len);
+						memcpy((char *)recordValue + 4 + len, &end, 1);
+
+						memcpy(&len, this->_value, 4);
+						memcpy(this->_value, (char *)this->_value + 4, len);
+						memcpy((char *)this->_value + 4 + len, &end, 1);
+					}
+
+					if (!compare(recordValue, this->_compOp, this->_value, type))
+					{
+						cout << "RM_ScanIterator::getNextTuple - Data at [" << pageNum << ":" << slotNum << "] does not meet criterion." << endl;
+						slotNum++;
+						free(recordValue);
+						free(tuple);
+						continue;
+					}
 				}
 			}
 
 			cout << "RM_ScanIterator::getNextTuple - Found one valid record at [" << pageNum << ":" << slotNum << "]." << endl;
 			this->_slotNum = slotNum;
 			projectTuple(tuple, attrs, this->_attributeNames, data);
+			free(recordValue);
+			free(tuple);
 			break;
 		}
 
@@ -1695,8 +1713,6 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 		cerr << "RM::readTuple - Failed to close data file [" << this->_tableName << "]." << endl;
 		return -1;
 	}
-	free(recordValue);
-	free(tuple);
 
 	if (pageNum >= totalPageNum)
 	{
@@ -1708,6 +1724,7 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 	rid.slotNum = this->_slotNum;
 	return 0;
 }
+
 RC RM_ScanIterator::close()
 {
 	this->_tableName = "";
