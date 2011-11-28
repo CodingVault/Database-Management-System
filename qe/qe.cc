@@ -274,3 +274,252 @@ void NLJoin::getRightValue(void *rightTuple, void *value)
 		offset += len;
 	}
 }
+/*********************************  IndexScan class begins **********************************************************/
+IndexScan::IndexScan(RM &rm, const IX_IndexHandle &indexHandle, const string tablename, const char *alias):rm(rm)
+{
+	// Get Attributes from RM
+    rm.getAttributes(tablename, attrs);
+
+    // Store tablename
+    this->tablename = tablename;
+    if(alias) this->tablename = string(alias);
+
+    // Store Index Handle
+    iter = NULL;
+    this->handle = indexHandle;
+}
+
+void IndexScan::setIterator(CompOp compOp, void *value)
+{
+	if(iter != NULL)
+    {
+		iter->CloseScan();
+        delete iter;
+    }
+    iter = new IX_IndexScan();
+    iter->OpenScan(handle, compOp, value);
+}
+
+RC IndexScan::getNextTuple(void *data)
+{
+	RID rid;
+    int rc = iter->GetNextEntry(rid);
+    if(rc == 0)
+    {
+    	rc = rm.readTuple(tablename.c_str(), rid, data);
+    }
+    return rc;
+}
+
+void IndexScan::getAttributes(vector<Attribute> &attrs) const
+{
+	attrs.clear();
+    attrs = this->attrs;
+    unsigned i;
+
+    // For attribute in vector<Attribute>, name it as rel.attr
+    for(i = 0; i < attrs.size(); ++i)
+    {
+    	string tmp = tablename;
+        tmp += ".";
+        tmp += attrs[i].name;
+        attrs[i].name = tmp;
+    }
+}
+
+IndexScan::~IndexScan()
+{
+	iter->CloseScan();
+}
+/*********************************  IndexScan class ends   **********************************************************/
+
+/*********************************  Filter class begins **********************************************************/
+/*
+ * get a specified attribute in a tuple
+ */
+void getAttrValue(void*data, void*attr_data, vector<Attribute> attrs, string selectAttr)
+{
+	unsigned offset = 0;
+	for(unsigned i = 0; i < attrs.size(); i++)
+	{
+		if(attrs[i].name == selectAttr)
+		{
+			if(attrs[i].type == TypeInt || attrs[i].type == TypeReal)
+			{
+				memcpy((char*)attr_data,(char*)data+offset,4);
+			}
+			else
+			{
+				memcpy((char*)attr_data,(char*)data+offset+4,*((int*)(data)+offset));
+				memcpy((char*)attr_data + *((int*)(data)+offset), &("\0"),1); //add '\0'in the end
+			}
+			break;
+		}
+		if(attrs[i].type == TypeInt || attrs[i].type == TypeReal)
+	    {
+			offset += 4;
+	    }
+		else
+		{
+			offset += *((int*)(data) + offset) + 4;
+		}
+	}
+}
+
+Filter::Filter(Iterator *input, const Condition &condition)
+{
+	this->input = input;
+	this->input->getAttributes(this->attrs);
+	this->condition = condition;
+}
+
+RC Filter::getNextTuple(void *data)
+{
+	char attr_data[PF_PAGE_SIZE] = "\0";
+	while(this->input->getNextTuple(data) != QE_EOF)
+	{
+		// analyze the tuple
+		getAttrValue(data, attr_data, this->attrs, this->condition.lhsAttr);
+		if( compare(attr_data, this->condition.op,
+				this->condition.rhsValue.data, this->condition.rhsValue.type) )
+		{
+			return 0;
+		}
+	};
+	//reach the end of the input iterator
+	return QE_EOF;
+}
+
+void Filter::getAttributes(vector<Attribute> &attrs) const
+{
+	attrs.clear();
+	attrs = this->attrs;
+}
+
+Filter::~Filter()
+{
+	this->input = NULL;
+}
+/*********************************  Filter class ends **********************************************************/
+
+
+/*********************************  Index Loop Join class begins **************************************************/
+INLJoin::INLJoin (Iterator *leftIn,                               // Iterator of input R
+             IndexScan *rightIn,                             // IndexScan Iterator of input S
+             const Condition &condition,                     // Join condition
+             const unsigned numPages                         // Number of pages can be used to do join (decided by the optimizer)
+     )
+{
+	this->leftIn = leftIn;
+	this->rightIn = rightIn;
+	this->condition = condition;
+	this->numPages = numPages;
+	this->left_data = ( char* )malloc(PF_PAGE_SIZE);
+
+	this->leftIn->getAttributes(this->left_attrs);
+	this->rightIn->getAttributes(this->right_attrs);
+
+	for(unsigned i = 0; i < this->left_attrs.size(); i++)
+	{
+		if(this->left_attrs[i].name == this->condition.lhsAttr)
+		{
+			this->type = this->left_attrs[i].type; //TODO: how about the type of left and right attribute are different
+			break;
+		}
+	}
+
+	if(this->leftIn->getNextTuple(this->left_data) == QE_EOF)
+	{// get the first tuple in the outer relation
+		this->left_data = NULL;
+	}
+}
+
+void joinTuples(void* output, void* lInput, void* rInput, vector<Attribute>lAttrs,vector<Attribute>rAttrs )
+{
+	unsigned lLength = 0, rLength = 0, i = 0;
+	for(i = 0; i < lAttrs.size(); i++)
+	{// write the left tuple
+		if(lAttrs[i].type == TypeInt || lAttrs[i].type == TypeReal)
+		{
+			lLength += 4;
+		}
+		else
+		{
+			lLength += *((int*)(lInput) + lLength) + 4;
+		}
+	}
+
+	memcpy(output, lInput,lLength);
+
+	for(i = 0; i < rAttrs.size(); i++)
+	{// write the left tuple
+		if(rAttrs[i].type == TypeInt || rAttrs[i].type == TypeReal)
+		{
+			rLength += 4;
+		}
+		else
+		{
+			rLength += *((int*)(rInput) + rLength) + 4;
+		}
+	}
+	memcpy((char*)output+lLength, (char*)rInput,rLength);
+}
+
+RC INLJoin::getNextTuple(void *data)
+{
+	char right_data[PF_PAGE_SIZE] = "\0";
+	char right_attr_data[PF_PAGE_SIZE] = "\0";
+	char left_attr_data[PF_PAGE_SIZE] = "\0";
+	if(this->left_data == NULL)
+	{
+		return QE_EOF;
+	}
+
+	do{
+		getAttrValue(this->left_data, left_attr_data, this->left_attrs, this->condition.lhsAttr);
+		while( this->rightIn->getNextTuple(right_data) != QE_EOF)
+	    {// loop in the inner relation
+		    getAttrValue(right_data, right_attr_data, this->right_attrs, this->condition.rhsAttr);
+		    if( compare(left_attr_data, this->condition.op,
+			    	right_attr_data, this->type) )
+		    {
+		    	//join the two tuples
+		    	joinTuples( data, this->left_data, right_data, this->left_attrs, this->right_attrs );
+			    return 0;
+		    }
+	    }
+		// reset the inner iterator
+		this->rightIn->setIterator(NO_OP,NULL);
+	}while(this->leftIn->getNextTuple(this->left_data) != QE_EOF);
+
+	return QE_EOF;
+}
+
+void INLJoin::getAttributes(vector<Attribute> &attrs) const
+{
+	attrs.clear();
+	attrs = this->left_attrs;
+	attrs.insert(attrs.end(), this->right_attrs.begin(), this->right_attrs.end());
+}
+
+INLJoin::~INLJoin()
+{
+	this->leftIn = NULL;
+	this->rightIn = NULL;
+	this->left_attrs.clear();
+	this->right_attrs.clear();
+	if(this->left_data != NULL)
+	{
+		free(this->left_data);
+		this->left_data = NULL;
+	}
+}
+/*********************************  Index Loop Join class ends **************************************************/
+
+
+
+/*********************************  Hash Join class begins **************************************************/
+
+
+/*********************************  Hash Join class ends **************************************************/
+

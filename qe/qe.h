@@ -125,73 +125,24 @@ class IndexScan : public Iterator
 {
     // A wrapper inheriting Iterator over IX_IndexScan
     public:
+        IndexScan(RM &rm, const IX_IndexHandle &indexHandle,
+        		const string tablename, const char *alias = NULL);
+
+        // Start a new iterator given the new compOp and value
+        void setIterator(CompOp compOp, void *value);
+
+        RC getNextTuple(void *data);
+
+        void getAttributes(vector<Attribute> &attrs) const;
+
+        ~IndexScan();
+
+    private:
         RM &rm;
         IX_IndexScan *iter;
         IX_IndexHandle handle;
         string tablename;
         vector<Attribute> attrs;
-        
-        IndexScan(RM &rm, const IX_IndexHandle &indexHandle, const string tablename, const char *alias = NULL):rm(rm)
-        {
-            // Get Attributes from RM
-            rm.getAttributes(tablename, attrs);
-                     
-            // Store tablename
-            this->tablename = tablename;
-            if(alias) this->tablename = string(alias);
-            
-            // Store Index Handle
-            iter = NULL;
-            this->handle = indexHandle;
-        };
-       
-        // Start a new iterator given the new compOp and value
-        void setIterator(CompOp compOp, void *value)
-        {
-            if(iter != NULL)
-            {
-                iter->CloseScan();
-                delete iter;
-            }
-            iter = new IX_IndexScan();
-            iter->OpenScan(handle, compOp, value);
-        };
-       
-        RC getNextTuple(void *data)
-        {
-            RID rid;
-            int rc = iter->GetNextEntry(rid);
-            if(rc == 0)
-            {
-                rc = rm.readTuple(tablename.c_str(), rid, data);
-            }
-            return rc;
-        };
-        
-        void getAttributes(vector<Attribute> &attrs) const
-        {
-            attrs.clear();
-            attrs = this->attrs;
-            unsigned i;
-
-            // For attribute in vector<Attribute>, name it as rel.attr
-            for(i = 0; i < attrs.size(); ++i)
-            {
-                string tmp = tablename;
-                tmp += ".";
-                tmp += attrs[i].name;
-                attrs[i].name = tmp;
-            }
-        };
-        
-        ~IndexScan() 
-        {
-            if(iter != NULL)
-            {
-            	iter->CloseScan();
-                delete iter;
-            }
-        };
 };
 
 
@@ -203,10 +154,15 @@ class Filter : public Iterator {
         );
         ~Filter();
         
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+    private:
+        Iterator* input;
+        vector<Attribute> attrs;
+        Condition condition;
 };
+
 
 
 class Project : public Iterator {
@@ -271,9 +227,21 @@ class INLJoin : public Iterator {
         
         ~INLJoin();
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+    private:
+        Iterator* leftIn;
+        IndexScan* rightIn;
+
+        vector<Attribute> left_attrs;
+        vector<Attribute> right_attrs;
+
+        void* left_data;
+
+        Condition condition;
+        unsigned numPages;
+        AttrType type;
 };
 
 
