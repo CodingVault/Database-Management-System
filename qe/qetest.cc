@@ -212,6 +212,14 @@ void insertDept(const string tablename, const int name_length, const string name
     return;
 }
 
+void printAttribute(const vector<Attribute> &attrs)
+{
+	cout << "****Printing attributes begin****" << endl;
+	for (unsigned i = 0; i < attrs.size(); ++i)
+		cout << "Attribute " << i << " - name: " << attrs[i].name << "; type: " << attrs[i].type << endl;
+	cout << "****Printing attributes begin****" << endl;
+}
+
 void printTuple(void *data, const vector<Attribute> &attrs)
 {
 	cout << "****Printing tuple begin****" << endl;
@@ -259,34 +267,54 @@ void opTest()
 	insertDept(deptTableName, 3, "Toy", 100);
 
 	TableScan *empScan = new TableScan(*rm, empTableName);
-//	TableScan *deptScan = new TableScan(*rm, deptTableName);
+	TableScan *deptScan = new TableScan(*rm, deptTableName);
+	void *data = malloc(BUFF_SIZE);
+	vector<Attribute> attrs;
 
-//	Condition cond_f;
-//	cond_f.lhsAttr = "Salary";
-//	cond_f.op = GT_OP;
-//	cond_f.bRhsIsAttr = false;
-//	Value value;
-//	value.type = TypeInt;
-//	value.data = malloc(BUFF_SIZE);
-//	*(int *)value.data = 50000;
-//	cond_f.rhsValue = value;
-//
+	Condition cond_f;
+	cond_f.lhsAttr = empTableName + ".Salary";
+	cond_f.op = GT_OP;
+	cond_f.bRhsIsAttr = false;
+	Value value;
+	value.type = TypeInt;
+	value.data = malloc(BUFF_SIZE);
+	*(int *)value.data = 5000;
+	cond_f.rhsValue = value;
+
 //	Filter *filter = new Filter(empScan, cond_f);
 
 	vector<string> attrNames;
-	attrNames.push_back("Employee.EmpName");
-	attrNames.push_back("Employee.Age");
-	attrNames.push_back("Employee.DeptNo");
+	attrNames.push_back(empTableName + ".EmpName");
+	attrNames.push_back(empTableName + ".Age");
+	attrNames.push_back(empTableName + ".DeptNo");
 
+	cout << "******* Test Project Begin *******" << endl;
 	Project project(empScan, attrNames);
-
-	vector<Attribute> attrs;
 	project.getAttributes(attrs);
-	void *data = malloc(BUFF_SIZE);
 	while (project.getNextTuple(data) != QE_EOF)
 		printTuple(data, attrs);
+	cout << "******* Test Project End *******" << endl << endl;
+
+	Condition cond_j;
+	cond_j.lhsAttr = empTableName + ".DeptNo";
+	cond_j.op = EQ_OP;
+	cond_j.bRhsIsAttr = true;
+	cond_j.rhsAttr = deptTableName + ".DeptNo";
+
+	empScan->setIterator();
+	deptScan->setIterator();
+	cout << "******* Test NLJoin Begin *******" << endl;
+	NLJoin *nlJoin  = new NLJoin(empScan, deptScan, cond_j, 10000);
+	nlJoin->getAttributes(attrs);
+	printAttribute(attrs);
+	while (nlJoin->getNextTuple(data) != QE_EOF)
+		printTuple(data, attrs);
+	cout << "******* Test NLJoin End *******" << endl << endl;
+
 	free(data);
-//	free(value.data);
+	free(value.data);
+	delete empScan;
+	delete deptScan;
 }
 
 int main() 
@@ -295,5 +323,5 @@ int main()
 
 	opTest();
 
-	cout << endl << "PASS..." << endl;
+	cout << "PASS..." << endl;
 }

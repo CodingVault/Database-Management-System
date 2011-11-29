@@ -99,6 +99,7 @@ NLJoin::NLJoin(Iterator *leftIn,                      // Iterator of input R
 	this->_condition = condition;
 	this->_numPages = numPages;
 	this->_leftTuple = NULL;
+	this->_leftValue = NULL;
 
 	leftIn->getAttributes(this->_leftAttrs);
 	rightIn->getAttributes(this->_rightAttrs);
@@ -108,6 +109,25 @@ NLJoin::~NLJoin()
 {
 	if (this->_leftTuple)
 		free(this->_leftTuple);
+}
+
+void printValue(void *value, const AttrType &attrType)
+{
+	switch (attrType)
+	{
+	case TypeInt:
+		cout << "(INT) ";
+		cout << *(int *)value << endl;
+		break;
+	case TypeReal:
+		cout << "(REAL) ";
+		cout << *(float *)value << endl;
+		break;
+	case TypeVarChar:
+		cout << "(VAR_CHAR) ";
+		cout << (char *)value << endl;
+		break;
+	}
 }
 
 RC NLJoin::getNextTuple(void *data)
@@ -126,37 +146,40 @@ RC NLJoin::getNextTuple(void *data)
 	{
 		// prepare values for join condition
 		RC rc = getLeftValue();	// get the type of attribute simultaneously
+		if (DEBUG)
+		{
+			cout << "NLJoin::getNextTuple - Left value: ";
+			printValue(this->_leftValue, this->_attrType);
+		}
 		if (rc != SUCCESS)
 			return rc;
 
 		char *rightValue;
-		if (this->_condition.bRhsIsAttr)
+		rightValue = (char *) malloc(BUFF_SIZE);
+		getRightValue(rightTuple, rightValue);
+		if (DEBUG)
 		{
-			rightValue = (char *) malloc(BUFF_SIZE);
-			getRightValue(rightTuple, rightValue);
+			cout << "NLJoin::getNextTuple - Right value: ";
+			printValue(rightValue, this->_attrType);
 		}
 
-		// append end of string
+		// get lengths of both tuples
 		unsigned leftLen = this->getLeftLength();
 		unsigned rightLen = this->getRightLength(rightTuple);
-		*((char *)this->_leftValue + leftLen) = '\0';
-		if (rightValue)
-			rightValue[rightLen] = '\0';
-		else
-			*((char *)this->_condition.rhsValue.data + rightLen) = '\0';
 
 		// compare
-		if ((rightValue && compare(this->_leftValue, this->_condition.op, rightValue, this->_attrType)) ||
-				(!rightValue && compare(this->_leftValue, this->_condition.op, this->_condition.rhsValue.data, this->_attrType)))
+		if (compare(this->_leftValue, this->_condition.op, rightValue, this->_attrType))
 		{
 			memcpy(data, this->_leftTuple, leftLen);
 			memcpy((char *)data + leftLen, rightTuple, rightLen);
+
+			return SUCCESS;
 		}
-		if (rightValue)
-			free(rightValue);
+		free(rightValue);
 	}
 	else
 	{
+		cout << "NLJoin::getNextTuple - Preparing for reading next left tuple." << endl;
 		free(this->_leftTuple);
 		this->_leftTuple = NULL;
 		if (this->_leftValue)
@@ -169,7 +192,7 @@ RC NLJoin::getNextTuple(void *data)
 	}
 	free(rightTuple);
 
-	return SUCCESS;
+	return getNextTuple(data);
 }
 
 void NLJoin::getAttributes(vector<Attribute> &attrs) const
@@ -205,10 +228,10 @@ unsigned NLJoin::getRightLength(void *rightTuple)
 	for (unsigned i = 0; i < this->_rightAttrs.size(); ++i)
 	{
 		unsigned shift = sizeof(int);
-		if (this->_leftAttrs[i].type == TypeVarChar)
+		if (this->_rightAttrs[i].type == TypeVarChar)
 		{
 			unsigned len = 0;
-			memcpy(&len, (char *)this->_leftTuple + offset, sizeof(int));
+			memcpy(&len, (char *)rightTuple + offset, sizeof(int));
 			shift += len;
 		}
 		offset += shift;
@@ -228,7 +251,6 @@ RC NLJoin::getLeftValue()
 		unsigned len = sizeof(int);
 		if (this->_leftAttrs[i].type == TypeVarChar)
 		{
-			unsigned len = 0;
 			memcpy(&len, (char *)this->_leftTuple + offset, sizeof(int));
 			offset += sizeof(int);
 		}
@@ -242,9 +264,12 @@ RC NLJoin::getLeftValue()
 				cerr << "but found [" << this->_attrType << "] according to Condition.lhsAttr." << endl;
 				return INCOMPLIANCE;
 			}
+			if (DEBUG)
+				cout << "NLJoin::getLeftValue - Found " << this->_condition.lhsAttr << " [type: " << this->_attrType << "; length: " << len << "]" << endl;
 
 			this->_leftValue = malloc(len);
 			memcpy(this->_leftValue, (char *)this->_leftTuple + offset, len);
+			*((char *)this->_leftValue + len) = '\0';
 			return SUCCESS;
 		}
 		offset += len;
@@ -255,23 +280,40 @@ RC NLJoin::getLeftValue()
 
 void NLJoin::getRightValue(void *rightTuple, void *value)
 {
-	unsigned offset = 0;
-	for (unsigned i = 0; i < this->_rightAttrs.size(); ++i)
+	if (this->_condition.bRhsIsAttr)	// get right value from right tuple according to given attribute name
 	{
-		unsigned len = sizeof(int);
-		if (this->_rightAttrs[i].type == TypeVarChar)
+		unsigned offset = 0;
+		for (unsigned i = 0; i < this->_rightAttrs.size(); ++i)
 		{
-			unsigned len = 0;
-			memcpy(&len, (char *)this->_leftTuple + offset, sizeof(int));
+			unsigned len = sizeof(int);
+			if (this->_rightAttrs[i].type == TypeVarChar)
+			{
+				memcpy(&len, (char *)rightTuple + offset, sizeof(int));
+				offset += sizeof(int);
+			}
+
+			if (this->_condition.rhsAttr == this->_rightAttrs[i].name)
+			{
+				if (DEBUG)
+					cout << "NLJoin::getRightValue - Found " << this->_condition.rhsAttr << " [type: " << this->_rightAttrs[i].type << "; length: " << len << "]" << endl;
+				memcpy(value, (char *)rightTuple + offset, len);
+				*((char *)value + len) = '\0';
+				return;
+			}
+			offset += len;
+		}
+	}
+	else		// get right value from Value in Condition
+	{
+		unsigned offset = 0;
+		unsigned len = sizeof(int);
+		if (this->_condition.rhsValue.type == TypeVarChar)
+		{
+			memcpy(&len, this->_condition.rhsValue.data, sizeof(int));
 			offset += sizeof(int);
 		}
-
-		if (this->_condition.rhsAttr == this->_rightAttrs[i].name)
-		{
-			memcpy(value, (char *)rightTuple + offset, len);
-			return;
-		}
-		offset += len;
+		memcpy(value, (char *)this->_condition.rhsValue.data + offset, len);
+		*((char *)value + len) = '\0';
 	}
 }
 /*********************************  IndexScan class begins **********************************************************/

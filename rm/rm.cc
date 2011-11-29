@@ -1481,7 +1481,7 @@ bool comp(const T a, const CompOp &compOp, const T b)
 	case CompOp(5):
 			return a != b;
 	case CompOp(6):
-			return false;
+			return true;
 	}
 	return false;
 }
