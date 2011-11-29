@@ -4,6 +4,27 @@
 
 #define DEBUG true
 
+void printValue(void *value, const AttrType &attrType)
+{
+	switch (attrType)
+	{
+	case TypeInt:
+		cout << "(INT) ";
+		cout << *(int *)value << endl;
+		break;
+	case TypeReal:
+		cout << "(REAL) ";
+		cout << *(float *)value << endl;
+		break;
+	case TypeVarChar:
+		cout << "(VAR_CHAR) ";
+		cout << (char *)value << endl;
+		break;
+	}
+}
+
+/************************* Project Begin *************************/
+
 Project::Project(Iterator *input, const vector<string> &attrNames)
 {
 	this->_iter = input;
@@ -87,6 +108,9 @@ void Project::getAttributes(vector<Attribute> &attrs) const
     }
 }
 
+/************************* Project End *************************/
+
+/************************* NLJoin Begin *************************/
 
 NLJoin::NLJoin(Iterator *leftIn,                      // Iterator of input R
         TableScan *rightIn,                           // TableScan Iterator of input S
@@ -109,25 +133,6 @@ NLJoin::~NLJoin()
 {
 	if (this->_leftTuple)
 		free(this->_leftTuple);
-}
-
-void printValue(void *value, const AttrType &attrType)
-{
-	switch (attrType)
-	{
-	case TypeInt:
-		cout << "(INT) ";
-		cout << *(int *)value << endl;
-		break;
-	case TypeReal:
-		cout << "(REAL) ";
-		cout << *(float *)value << endl;
-		break;
-	case TypeVarChar:
-		cout << "(VAR_CHAR) ";
-		cout << (char *)value << endl;
-		break;
-	}
 }
 
 RC NLJoin::getNextTuple(void *data)
@@ -316,6 +321,9 @@ void NLJoin::getRightValue(void *rightTuple, void *value)
 		*((char *)value + len) = '\0';
 	}
 }
+
+/************************* NLJoin End *************************/
+
 /*********************************  IndexScan class begins **********************************************************/
 IndexScan::IndexScan(RM &rm, const IX_IndexHandle &indexHandle, const string tablename, const char *alias):rm(rm)
 {
