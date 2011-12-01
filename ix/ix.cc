@@ -1083,6 +1083,12 @@ RC BTree<KEY>::DeleteLeafNode(BTreeNode<KEY>* Node, const KEY key,const RID &rid
 		}
 
 		MergeNode(leftNode,rightNode);
+		if (leftNode->right)
+		{
+			leftNode->right->left = leftNode;
+			leftNode->right->leftPageNum = leftNode->pageNum;
+			this->_updated_nodes.push_back(leftNode->right);
+		}
 		if(DEBUG)
 		    cout<<"merge with sibling leaf node"<<endl;
 		this->_updated_nodes.push_back(leftNode);
@@ -1809,6 +1815,12 @@ RC IX_IndexHandle::DeleteEntry(BTree<KEY> *tree, void* key, const RID &rid)
 	rc = this->WriteNodes(tree->GetUpdatedNodes());
 	rc = this->WriteDeletedNodes(tree->GetDeletedPageNums());
 	tree->ClearPendingNodes();
+
+	if (DEBUG)
+	{
+		cout << "IX_IndexHandle::DeleteEntry - Print tree:" << endl;
+		PrintTree(tree);
+	}
 	return rc;
 }
 
