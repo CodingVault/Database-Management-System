@@ -288,8 +288,7 @@ RC BTree<KEY>::SearchNode(BTreeNode<KEY> *node, const KEY key, const unsigned he
 		if (node->children[index] == NULL)
 		{
 			node->children[index] = this->_func_ReadNode(node->childrenPageNums[index], nodeType);
-			BTreeNode<KEY> *parent = node;
-			node->children[index]->parent = parent;	// NOTE: remember node->children[index] is a pointer; use "->" to refer to its fields
+			node->children[index]->parent = node;	// NOTE: remember node->children[index] is a pointer; use "->" to refer to its fields
 			node->children[index]->pos = index;
 		}
 
@@ -1587,9 +1586,9 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 	const unsigned RID_LENGTH = 8;
 	const unsigned PAGE_NUM_LENGTH = 4;
 
-	for (unsigned index = 0; index < nodes.size(); index++)
+	for (unsigned nodeCnt = 0; nodeCnt < nodes.size(); nodeCnt++)
 	{
-		BTreeNode<KEY> *node = nodes[index];
+		BTreeNode<KEY> *node = nodes[nodeCnt];
 		void *page = malloc(PF_PAGE_SIZE);
 
 		if (node->pageNum == -1) 	// new node
