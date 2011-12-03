@@ -762,7 +762,11 @@ HashJoin::HashJoin(Iterator *leftIn,                              // Iterator of
 	}
 
 	this->partition(this->leftIn, this->left_attrs, this->condition.lhsAttr, LEFT_PARTITION_PREFIX);
+	if (DEBUG)
+		cout << "HashJoin::HashJoin - Done partition for the left table." << endl;
 	this->partition(this->rightIn, this->right_attrs, this->condition.rhsAttr, RIGHT_PARTITION_PREFIX);
+	if (DEBUG)
+		cout << "HashJoin::HashJoin - Done partition for the right table." << endl;
 }
 
 HashJoin::~HashJoin()
@@ -787,6 +791,7 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 	for (unsigned i = 0; i < this->bufferSize; i++)
 		pf_manager->CreateFile((file_prefix + itoa(i)).c_str());
 
+	unsigned count = 0;
 	while (iterator->getNextTuple(data) != QE_EOF)
 	{
 		getAttrValue(data, attr_data, attrs, attr);
@@ -797,12 +802,21 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 		if (hash_table[hashNum].offset + length > PF_PAGE_SIZE)
 			this->writeBucket(hash_table, hashNum, file_prefix);
 
-		if (DEBUG)
-			cout << "HashJoin::partition - Putting data to bucket [" << hashNum << "]." << endl;
 		hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].offset + length);
 	    memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].offset, data, length);
 		hash_table[hashNum].offset += length;
+//		if (DEBUG)
+		{
+			count++;
+			if (count % 50 == 0)
+			{
+				cout << "HashJoin::partition - Put data to bucket [" << hashNum << "]." << endl;
+				cout << "HashJoin::partition - Hashed " << count << " tuples to this point." << endl;
+			}
+		}
 	}
+//	if (DEBUG)
+		cout << "HashJoin::partition - Hashed " << count << " tuples in total." << endl;
 
 	// flush rest data in the buffer to disk
 	for (unsigned i = 0; i < this->bufferSize; ++i)
