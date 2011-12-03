@@ -2116,7 +2116,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
 		IX_PrintError(OPEN_SCAN_ERROR);
 		return OPEN_SCAN_ERROR;
 	}
-	if (compOp != NO_OP && value == NULL)
+	if (this->compOp != NO_OP && value == NULL)
 	{
 		IX_PrintError(INVALIDE_INPUT_DATA);
 		IX_PrintError(OPEN_SCAN_ERROR);
@@ -2134,7 +2134,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
 			this->skipValue = malloc(4);
 			memcpy(this->skipValue, value, 4);
 		}
-		else
+		else if (this->compOp != NO_OP)
 		{
 			this->keyValue = malloc(4);
 			memcpy(this->keyValue, value, 4);
@@ -2168,6 +2168,13 @@ RC IX_IndexScan::CloseScan()
 
 RC IX_IndexScan::GetNextEntry(RID &rid)
 {
+	if (!this->isOpen)
+	{
+		IX_PrintError(INVALID_OPERATION);
+		IX_PrintError(GET_NEXT_TUPLE_ERROR);
+		return GET_NEXT_TUPLE_ERROR;
+	}
+
 	if (DEBUG)
 		cout << "IX_IndexScan::GetNextEntry - Getting next tuple for OP: " << this->compOp << endl;
 	if (this->compOp == NO_OP || this->compOp == NE_OP)
