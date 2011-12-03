@@ -1771,6 +1771,7 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 		if (slotNum < count)
 			break;
 		pageNum++;
+		this->_slotNum = 0;
 	}
 
 	if (manager->CloseFile(handle) != 0)
