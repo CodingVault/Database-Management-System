@@ -240,6 +240,10 @@ class INLJoin : public Iterator {
         RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+
+    protected:
+        RC openIndexScan(void* value);
+
     private:
         Iterator* leftIn;
         IndexScan* rightIn;
@@ -248,6 +252,7 @@ class INLJoin : public Iterator {
         vector<Attribute> right_attrs;
 
         void* left_data;
+        void* left_attr_data;
 
         Condition condition;
         unsigned numPages;

@@ -528,7 +528,8 @@ INLJoin::INLJoin (Iterator *leftIn,                               // Iterator of
 	this->rightIn = rightIn;
 	this->condition = condition;
 	this->numPages = numPages;
-	this->left_data = ( char* )malloc(PF_PAGE_SIZE);
+	this->left_data = NULL;
+	this->left_attr_data = NULL;
 
 	this->leftIn->getAttributes(this->left_attrs);
 	this->rightIn->getAttributes(this->right_attrs);
@@ -541,11 +542,19 @@ INLJoin::INLJoin (Iterator *leftIn,                               // Iterator of
 			break;
 		}
 	}
+}
 
-	if(this->leftIn->getNextTuple(this->left_data) == QE_EOF)
-	{// get the first tuple in the outer relation
-		this->left_data = NULL;
+RC INLJoin::openIndexScan(void *value)
+{
+	// TODO: !!! other operations?
+	switch (this->condition.op)
+	{
+	case EQ_OP:
+		this->rightIn->setIterator(EQ_OP, value);
+		break;
 	}
+
+	return SUCCESS;
 }
 
 void joinTuples(void* output, void* lInput, void* rInput, vector<Attribute>lAttrs,vector<Attribute>rAttrs )
@@ -583,29 +592,41 @@ RC INLJoin::getNextTuple(void *data)
 {
 	char right_data[PF_PAGE_SIZE] = "\0";
 	char right_attr_data[PF_PAGE_SIZE] = "\0";
-	char left_attr_data[PF_PAGE_SIZE] = "\0";
 	if(this->left_data == NULL)
 	{
-		return QE_EOF;
+		this->left_data = malloc(PF_PAGE_SIZE);
+		this->left_attr_data = malloc(PF_PAGE_SIZE);
+		if (this->leftIn->getNextTuple(this->left_data) != SUCCESS)
+		{
+			free(this->left_data);
+			this->left_data = NULL;
+			if (this->left_attr_data)
+			{
+				free(this->left_attr_data);
+				this->left_attr_data = NULL;
+			}
+			return QE_EOF;
+		}
+		getAttrValue(this->left_data, this->left_attr_data, this->left_attrs, this->condition.lhsAttr);
+		this->openIndexScan(this->left_attr_data);
 	}
 
-	do{
-		getAttrValue(this->left_data, left_attr_data, this->left_attrs, this->condition.lhsAttr);
-		while( this->rightIn->getNextTuple(right_data) != QE_EOF)
-	    {// loop in the inner relation
-		    getAttrValue(right_data, right_attr_data, this->right_attrs, this->condition.rhsAttr);
-		    if( compare(left_attr_data, this->condition.op, right_attr_data, this->type) )
-		    {
-		    	//join the two tuples
-		    	joinTuples( data, this->left_data, right_data, this->left_attrs, this->right_attrs );
-			    return 0;
-		    }
-	    }
-		// reset the inner iterator
-		this->rightIn->setIterator(NO_OP,NULL);
-	}while(this->leftIn->getNextTuple(this->left_data) != QE_EOF);
+	while( this->rightIn->getNextTuple(right_data) != QE_EOF)
+	{// loop in the inner relation
+		getAttrValue(right_data, right_attr_data, this->right_attrs, this->condition.rhsAttr);
+		if( compare(this->left_attr_data, this->condition.op, right_attr_data, this->type) )
+		{
+			//join the two tuples
+			joinTuples( data, this->left_data, right_data, this->left_attrs, this->right_attrs );
+			return 0;
+		}
+	}
 
-	return QE_EOF;
+	free(this->left_data);
+	this->left_data = NULL;
+	free(this->left_attr_data);
+	this->left_attr_data = NULL;
+	return getNextTuple(data);
 }
 
 void INLJoin::getAttributes(vector<Attribute> &attrs) const
@@ -625,6 +646,11 @@ INLJoin::~INLJoin()
 	{
 		free(this->left_data);
 		this->left_data = NULL;
+	}
+	if(this->left_attr_data != NULL)
+	{
+		free(this->left_attr_data);
+		this->left_attr_data = NULL;
 	}
 }
 /*********************************  Index Loop Join class ends ************************************/
@@ -919,7 +945,10 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 
 	// if cannot be found in hash table, return
 	if (hash_table[hashNum].data == NULL)
+	{
+		free(left_attr_data);
 		return NOT_FOUND;
+	}
 
 	unsigned right_tuple_length = 0;
 	unsigned offset = sizeof(int);
@@ -935,7 +964,8 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 
 		if (compare(left_attr_data, EQ_OP, right_attr_data, this->attrType))
 		{
-			cout << "HashJoin::join - Found one tuple to join." << endl;
+			if (DEBUG)
+				cout << "HashJoin::join - Found one tuple to join." << endl;
 			free(right_attr_data);
 			break;
 		}
