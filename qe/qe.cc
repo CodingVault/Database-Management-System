@@ -22,6 +22,40 @@ void printValue(void *value, const AttrType &attrType)
 	}
 }
 
+void printTuples(void *data, const vector<Attribute> &attrs)
+{
+	cout << "****Printing tuple begin****" << endl;
+	unsigned offset = 0;
+	int iValue = 0;
+	float fValue = 0.0;
+	for (unsigned i = 0; i < attrs.size(); ++i)
+	{
+		switch (attrs[i].type)
+		{
+		case TypeInt:
+			memcpy(&iValue, (char *)data + offset, sizeof(int));
+			cout << attrs[i].name << ": " << iValue << endl;
+			offset += sizeof(int);
+			break;
+		case TypeReal:
+			memcpy(&fValue, (char *)data + offset, sizeof(float));
+			cout << attrs[i].name << ": " << fValue << endl;
+			offset += sizeof(int);
+			break;
+		case TypeVarChar:
+			memcpy(&iValue, (char *)data + offset, sizeof(int));
+			offset += sizeof(int);
+			char *temp = (char *)malloc(iValue);
+			memcpy(temp, (char *)data + offset, iValue);
+			offset += iValue;
+			temp[iValue] = '\0';
+			cout << attrs[i].name << ": " << temp << endl;
+			break;
+		}
+	}
+	cout << "****Printing tuple end****" << endl << endl;
+}
+
 /************************* Project Begin *************************/
 
 Project::Project(Iterator *input, const vector<string> &attrNames)
@@ -349,15 +383,16 @@ void IndexScan::setIterator(CompOp compOp, void *value)
     iter->OpenScan(handle, compOp, value);
 }
 
+// TODO: need to enhance error handling
 RC IndexScan::getNextTuple(void *data)
 {
 	RID rid;
     int rc = iter->GetNextEntry(rid);
     if(rc == 0)
     {
-    	rc = rm.readTuple(tablename.c_str(), rid, data);
+    	return rm.readTuple(tablename.c_str(), rid, data);
     }
-    return rc;
+    return QE_EOF;
 }
 
 void IndexScan::getAttributes(vector<Attribute> &attrs) const
@@ -433,6 +468,13 @@ RC Filter::getNextTuple(void *data)
 	{
 		// analyze the tuple
 		getAttrValue(data, attr_data, this->attrs, this->condition.lhsAttr);
+		cout << "Attribute data: " << *(float *)attr_data << endl;
+
+		unsigned rightLen = sizeof(int);
+		if (this->condition.rhsValue.type == TypeVarChar)
+			rightLen += *(int *)this->condition.rhsValue.data;
+		*((char *)this->condition.rhsValue.data + rightLen) = '\0';
+
 		if( compare(attr_data, this->condition.op,
 				this->condition.rhsValue.data, this->condition.rhsValue.type) )
 		{
@@ -680,40 +722,6 @@ HashJoin::HashJoin(Iterator *leftIn,                              // Iterator of
 
 HashJoin::~HashJoin()
 {
-}
-
-void printTuples(void *data, const vector<Attribute> &attrs)
-{
-	cout << "****Printing tuple begin****" << endl;
-	unsigned offset = 0;
-	int iValue = 0;
-	float fValue = 0.0;
-	for (unsigned i = 0; i < attrs.size(); ++i)
-	{
-		switch (attrs[i].type)
-		{
-		case TypeInt:
-			memcpy(&iValue, (char *)data + offset, sizeof(int));
-			cout << attrs[i].name << ": " << iValue << endl;
-			offset += sizeof(int);
-			break;
-		case TypeReal:
-			memcpy(&fValue, (char *)data + offset, sizeof(float));
-			cout << attrs[i].name << ": " << fValue << endl;
-			offset += sizeof(int);
-			break;
-		case TypeVarChar:
-			memcpy(&iValue, (char *)data + offset, sizeof(int));
-			offset += sizeof(int);
-			char *temp = (char *)malloc(iValue);
-			memcpy(temp, (char *)data + offset, iValue);
-			offset += iValue;
-			temp[iValue] = '\0';
-			cout << attrs[i].name << ": " << temp << endl;
-			break;
-		}
-	}
-	cout << "****Printing tuple end****" << endl << endl;
 }
 
 /**
