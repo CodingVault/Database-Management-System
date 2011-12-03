@@ -468,7 +468,6 @@ RC Filter::getNextTuple(void *data)
 	{
 		// analyze the tuple
 		getAttrValue(data, attr_data, this->attrs, this->condition.lhsAttr);
-		cout << "Attribute data: " << *(float *)attr_data << endl;
 
 		unsigned rightLen = sizeof(int);
 		if (this->condition.rhsValue.type == TypeVarChar)
