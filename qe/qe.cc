@@ -1,7 +1,7 @@
 
 #include "qe.h"
 
-#define DEBUG true
+#define DEBUG false
 
 void printValue(void *value, const AttrType &attrType)
 {

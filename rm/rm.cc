@@ -98,10 +98,12 @@ void writeDirectory(void *page, const Slot *slots, const unsigned count)
 			dataCount++;
 	}
 
-	cout << "RM::updateSlotDirectory - Slot directory info updated. ";
-	cout << "There are now " << count << " slots in total [" << dataCount << " valid one(s)]." << endl;
 	if (DEBUG)
+	{
+		cout << "RM::updateSlotDirectory - Slot directory info updated. ";
+		cout << "There are now " << count << " slots in total [" << dataCount << " valid one(s)]." << endl;
 		report(slots, count);
+	}
 }
 
 /*
@@ -188,7 +190,8 @@ void updateDirectory(Slot *slots, unsigned &count, const unsigned slotNum, const
 
 		// if slotNum == count, the new slot info will be transferred to empty slot
 		slots[count] = newSlot;
-		cout << "HELPER::updateDirectory - Adding newSlot " << count << " [size: " << newSlot.length << "] starting from offset [" << newSlot.offset << "]." << endl;
+		if (DEBUG)
+			cout << "HELPER::updateDirectory - Adding newSlot " << count << " [size: " << newSlot.length << "] starting from offset [" << newSlot.offset << "]." << endl;
 		slots[slotNum] = update;	// must be after newSlot info is written in case slotNum == count
 		if (slotNum == count)
 			empty = newSlot;
@@ -244,13 +247,15 @@ void getAttributeValue(const void *tuple, const vector<Attribute> &attrs, const 
 	// load the count of fields
 	unsigned fieldsCount = 0;
 	memcpy(&fieldsCount, tuple, 4);
-	cout << "Helper::getAttributeValue - Looking up " << fieldsCount << " fields in current record for attribute [" << attrName << "]." << endl;
+	if (DEBUG)
+		cout << "Helper::getAttributeValue - Looking up " << fieldsCount << " fields in current record for attribute [" << attrName << "]." << endl;
 
 	// try to read attribute value from current record
 	unsigned short offset = 4;
 	for (unsigned index = 0; index < fieldsCount; index++)
 	{
-		cout << "Helper::getAttributeValue - Reading attribute: " << attrs[index].name << "|" << attrs[index].type << endl;
+		if (DEBUG)
+			cout << "Helper::getAttributeValue - Reading attribute: " << attrs[index].name << "|" << attrs[index].type << endl;
 		unsigned len = 4;
 	    if (attrs[index].type == AttrType(2))
 	    {
@@ -258,11 +263,13 @@ void getAttributeValue(const void *tuple, const vector<Attribute> &attrs, const 
 	        memcpy(&fieldLen, (char *)tuple + offset, 4);
 	        len += fieldLen;
 	    }
-        cout << "Helper::getAttributeValue - Data start from " << offset << " with length of " << len << "." << endl;
+		if (DEBUG)
+			cout << "Helper::getAttributeValue - Data start from " << offset << " with length of " << len << "." << endl;
 
 	    if (strcmp(attrs[index].name.c_str(), attrName) == 0)
 	    {
-	    	cout << "Helper::getAttributeValue - Found value for attribute [" << attrName << "]." << endl;
+	    	if (DEBUG)
+	    		cout << "Helper::getAttributeValue - Found value for attribute [" << attrName << "]." << endl;
 	    	memcpy(data, (char *)tuple + offset, len);
 	        return;
 	    }
@@ -276,7 +283,8 @@ void getAttributeValue(const void *tuple, const vector<Attribute> &attrs, const 
 	{
 	    if (strcmp(attrs[fieldsCount].name.c_str(), attrName) == 0)
 	    {
-	    	cout << "Helper::getAttributeValue - Attribute is added after record was stored to database; return default value." << endl;
+	    	if (DEBUG)
+	    		cout << "Helper::getAttributeValue - Attribute is added after record was stored to database; return default value." << endl;
 	    	int iDefault = 0;
 	    	float fDefault = 0.0F;
 	    	int len = 0;
@@ -341,7 +349,8 @@ unsigned prepareAttribute(char *record, const char *tableName, const Attribute &
 
 void prepareAttributes(void *page)
 {
-	cout << "==== Entering RM::prepareAttributes." << endl;
+	if (DEBUG)
+		cout << "HELPER::prepareAttributes - Entering..." << endl;
 
 	string columnNames[] = {
 			"TABLE_NAME",
@@ -383,7 +392,8 @@ void prepareAttributes(void *page)
 	}
 	writeDirectory(page, slots, 5);
 
-	cout << "==== Leaving RM::prepareAttributes." << endl;
+	if (DEBUG)
+		cout << "HELPER::prepareAttributes - Leaving..." << endl;
 }
 
 // TODO: need to update for attribute modification with regards to position field in catalog
@@ -413,7 +423,8 @@ unsigned recordSizeof(const void *record, const vector<Attribute> attrs)
 
 void appendFieldCount(void *record, const void *data, unsigned &size, const unsigned fieldsCount)
 {
-	cout << "HELPER::appendFieldCount - Appending the count of fields [" << fieldsCount << "] to tuple." << endl;
+	if (DEBUG)
+		cout << "HELPER::appendFieldCount - Appending the count of fields [" << fieldsCount << "] to tuple." << endl;
 	memcpy(record, &fieldsCount, 4);
 	memcpy((char *)record + 4, data, size);
 	size += 4;
@@ -448,11 +459,13 @@ void validateTuple(void *data, unsigned &size, const vector<Attribute> attrs)
 {
 	unsigned fieldsCount = 0;
 	memcpy(&fieldsCount, data, 4);
-	cout << "HELPER::validateTuple - Validating the record (length: " << size << ") containing " << fieldsCount << " fields for now." << endl;
+	if (DEBUG)
+		cout << "HELPER::validateTuple - Validating the record (length: " << size << ") containing " << fieldsCount << " fields for now." << endl;
 
 	if (fieldsCount < attrs.size())
 	{
-		cout << "HELPER::validateTuple - Current count of attributes is " << attrs.size() << "; need to append default value(s)." << endl;
+		if (DEBUG)
+			cout << "HELPER::validateTuple - Current count of attributes is " << attrs.size() << "; need to append default value(s)." << endl;
 		while (fieldsCount < attrs.size())
 		{
 			appendFields(data, size, attrs[fieldsCount]);
@@ -461,7 +474,8 @@ void validateTuple(void *data, unsigned &size, const vector<Attribute> attrs)
 	}
 
 	memcpy(data, &fieldsCount, 4);
-	cout << "HELPER::validateTuple - Done validation; " << fieldsCount << " fields in total; record length is " << size << "." << endl;
+	if (DEBUG)
+		cout << "HELPER::validateTuple - Done validation; " << fieldsCount << " fields in total; record length is " << size << "." << endl;
 }
 
 RC RM::createTable(const string tableName, const vector<Attribute> &attrs)
@@ -558,13 +572,17 @@ RC RM::insertTuple(const string tableName, const void *data, RID &rid)
 		return -1;
 	}
 
-	cout << "RM::insertTuple - Inserting one tuple into table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::insertTuple - Inserting one tuple into table [" << tableName << "]." << endl;
 	vector<Attribute> attrs;
 	getAttributes(tableName, attrs);
 	unsigned size = recordSizeof(data, attrs);
-	cout << "RM::insertTuple - Loaded " << attrs.size() << " attribute(s) from catalog ";
-	cout << "for table [" << tableName << "]." << endl;
-	cout << "RM::insertTuple - The length of input tuple is " << size << "." << endl;
+	if (DEBUG)
+	{
+		cout << "RM::insertTuple - Loaded " << attrs.size() << " attribute(s) from catalog ";
+		cout << "for table [" << tableName << "]." << endl;
+		cout << "RM::insertTuple - The length of input tuple is " << size << "." << endl;
+	}
 	void *record = malloc(size + 4);
 	appendFieldCount(record, data, size, attrs.size());
 	RC rc = this->insert(handle, record, size, rid);
@@ -582,7 +600,8 @@ RC RM::insertTuple(const string tableName, const void *data, RID &rid)
 		return -2;
 	}
 
-	cout << "RM::insertTuple - Successfully inserted new data [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+	if (DEBUG)
+		cout << "RM::insertTuple - Successfully inserted new data [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
 	return 0;
 }
 
@@ -595,8 +614,11 @@ RC RM::readTuple(const string tableName, const RID &rid, void *data)
 		return -1;
 	}
 
-	cout << "RM::readTuple - Reading one tuple from table [" << tableName << "] ";
-	cout << "at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+	if (DEBUG)
+	{
+		cout << "RM::readTuple - Reading one tuple from table [" << tableName << "] ";
+		cout << "at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+	}
 	unsigned recordSize;
 	RC rc = this->read(handle, rid, data, recordSize);
 
@@ -618,7 +640,8 @@ RC RM::readTuple(const string tableName, const RID &rid, void *data)
 	validateTuple(data, recordSize, attrs);
 
 	memcpy(data, (char *)data + 4, recordSize - 4);		// remove field count
-	cout << "RM::readTuple - Successfully read tuple from table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::readTuple - Successfully read tuple from table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -632,13 +655,17 @@ RC RM::updateTuple(const string tableName, const void *data, const RID &rid)
 		return -1;
 	}
 
-	cout << "RM::updateTuple - Updating one tuple in table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::updateTuple - Updating one tuple in table [" << tableName << "]." << endl;
 	vector<Attribute> attrs;
 	getAttributes(tableName, attrs);	// TODO: LOW! what if failed?
 	unsigned size = recordSizeof(data, attrs);
-	cout << "RM::updateTuple - Reading one tuple from table [" << tableName << "] ";
-	cout << "at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
-	cout << "RM::updateTuple - The length of input tuple is " << size << "." << endl;
+	if (DEBUG)
+	{
+		cout << "RM::updateTuple - Reading one tuple from table [" << tableName << "] ";
+		cout << "at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+		cout << "RM::updateTuple - The length of input tuple is " << size << "." << endl;
+	}
 
 	void *record = malloc(size + 4);
 	appendFieldCount(record, data, size, attrs.size());
@@ -658,7 +685,8 @@ RC RM::updateTuple(const string tableName, const void *data, const RID &rid)
 		return -2;
 	}
 
-	cout << "RM::updateTuple - Successfully updated tuple in table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::updateTuple - Successfully updated tuple in table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -694,8 +722,11 @@ RC RM::readAttribute(const string tableName, const RID &rid, const string attrib
 
 	getAttributeValue(tuple, attrs, attributeName.c_str(), data);
 
-	cout << "RM::readAttribute - Loaded the attribute [" << attributeName << "] from table [" << tableName << "] ";
-	cout << "at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+	if (DEBUG)
+	{
+		cout << "RM::readAttribute - Loaded the attribute [" << attributeName << "] from table [" << tableName << "] ";
+		cout << "at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+	}
 	return 0;
 }
 
@@ -723,7 +754,8 @@ RC RM::deleteTuple(const string tableName, const RID &rid)
 		return -2;
 	}
 
-	cout << "RM::deleteTuple - Successfully deleted tuple in table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::deleteTuple - Successfully deleted tuple in table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -751,7 +783,8 @@ RC RM::deleteTuples(const string tableName)
 		return -2;
 	}
 
-	cout << "RM::deleteTuples - Successfully deleted all the tuples in table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::deleteTuples - Successfully deleted all the tuples in table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -786,7 +819,8 @@ RC RM::reorganizePage(const string tableName, const unsigned pageNumber)
 		return -2;
 	}
 
-	cout << "RM::reorganizePage - Successfully re-organized page " << pageNumber << " in table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::reorganizePage - Successfully re-organized page " << pageNumber << " in table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -813,7 +847,8 @@ RC RM::scan(const string tableName,
 		return -1;
 	}
 
-	cout << "RM::scan - Successfully scanned table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::scan - Successfully scanned table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -868,7 +903,8 @@ RC RM::reorganizeTable(const string tableName)
 		return -1;
 	}
 
-	cout << "RM::reorganizeTable - Successfully re-organized all the tuples in table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::reorganizeTable - Successfully re-organized all the tuples in table [" << tableName << "]." << endl;
 	return 0;
 }
 
@@ -876,7 +912,8 @@ RC RM::reorganizeTable(const string tableName)
 
 RC RM::initTableAttributes(PF_FileHandle &handle, const char *tableName, const vector<Attribute> &attrs)
 {
-	cout << "Initialize attributes for table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "Initialize attributes for table [" << tableName << "]." << endl;
 	for (unsigned index = 0; index < attrs.size(); index++)
 	{
 		Attribute attr = attrs[index];
@@ -938,7 +975,8 @@ unsigned attrInTable(const void *page, const Slot *directory, const unsigned slo
 	offset += 4;
 	memcpy(&pos, record + offset, 4);
 
-	cout << "RM::attrInTable - Got attribute at position " << pos << ": " << attr.name << "|" << attr.type << "|" << attr.length << endl;
+	if (DEBUG)
+		cout << "RM::attrInTable - Got attribute at position " << pos << ": " << attr.name << "|" << attr.type << "|" << attr.length << endl;
 	return pos;
 }
 
@@ -947,13 +985,15 @@ unsigned attrInTable(const void *page, const Slot *directory, const unsigned slo
  */
 RC RM::loadAttributes(PF_FileHandle &handle, const char *tableName, vector<Attribute> &attrs)
 {
-	cout << "RM::loadAttributes - Loading attributes for table [" << tableName << "]." << endl;
+	if (DEBUG)
+		cout << "RM::loadAttributes - Loading attributes for table [" << tableName << "]." << endl;
 	for (unsigned index = 0; index < _attrsCache.size(); index++)
 	{
 		if (strcmp(_attrsCache[index].tableName.c_str(), tableName) == 0)
 		{
 			attrs = _attrsCache[index].attrs;
-			cout << "RM::loadAttributes - Loaded attributes from cache." << endl;
+			if (DEBUG)
+				cout << "RM::loadAttributes - Loaded attributes from cache." << endl;
 			return 0;
 		}
 	}
@@ -989,7 +1029,8 @@ RC RM::loadAttributes(PF_FileHandle &handle, const char *tableName, vector<Attri
 	attrCache.tableName = tableName;
 	attrCache.attrs = attrs;
 	_attrsCache.push_back(attrCache);
-	cout << "RM::loadAttributes - Loaded attributes from catalog and updated attributes cache." << endl;
+	if (DEBUG)
+		cout << "RM::loadAttributes - Loaded attributes from catalog and updated attributes cache." << endl;
 
 	free(page);
 	return 0;
@@ -1046,7 +1087,8 @@ RC RM::insert(PF_FileHandle &handle, const void *data, const unsigned size, RID 
 		slotNum = findSpace(slots, count, size);
 		if (slotNum >= 0)	// found enough space for the data on current page
 		{
-			cout << "RM::insert - Found space at [" << pageNum << ":" << slotNum << "]" << endl;
+			if (DEBUG)
+				cout << "RM::insert - Found space at [" << pageNum << ":" << slotNum << "]" << endl;
 			break;
 		}
 
@@ -1062,7 +1104,8 @@ RC RM::insert(PF_FileHandle &handle, const void *data, const unsigned size, RID 
 		init(slots);
 		count = 0;
 		slotNum = 0;
-		cout << "RM::insert - New page " << pageNum << "." << endl;
+		if (DEBUG)
+			cout << "RM::insert - New page " << pageNum << "." << endl;
 	}
 
 	updatePageData(page, data, slots[slotNum].offset, size);
@@ -1108,10 +1151,12 @@ RC locateData(PF_FileHandle &handle, RID &rid, void *page, Slot *directory, unsi
 		{
 			memcpy(&rid.pageNum, (char *)page + directory[rid.slotNum].offset, 4);
 			memcpy(&rid.slotNum, (char *)page + directory[rid.slotNum].offset + 4, 4);
-			cout << "RM::locateData - Found tomb stone pointing to [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+			if (DEBUG)
+				cout << "RM::locateData - Found tomb stone pointing to [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
 		}
 	}
-	cout << "RM::locateData - Found data at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+	if (DEBUG)
+		cout << "RM::locateData - Found data at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
 
 	return 0;
 }
@@ -1174,7 +1219,8 @@ RC RM::update(PF_FileHandle &handle, const void *data, const unsigned size, cons
 		updateDirectory(directory, count, idCopy.slotNum, size);
 		writeDirectory(page, directory, count);
 		handle.WritePage(idCopy.pageNum, page);
-		cout << "RM::update - Updated tuple on its own slot." << endl;
+		if (DEBUG)
+			cout << "RM::update - Updated tuple on its own slot." << endl;
 		return 0;
 	}
 
@@ -1194,14 +1240,16 @@ RC RM::update(PF_FileHandle &handle, const void *data, const unsigned size, cons
 		writeDirectory(page, directory, count);
 		handle.WritePage(idCopy.pageNum, page);
 
-		cout << "RM::update - Updated tuple on its own slot by shifting data backward on the page." << endl;
+		if (DEBUG)
+			cout << "RM::update - Updated tuple on its own slot by shifting data backward on the page." << endl;
 		return 0;
 	}
 
 	// need to find new slot and insert data
 	RID newRid;
 	this->insert(handle, data, size, newRid);
-	cout << "RM::update - No enough space; inserted the data at [" << newRid.pageNum << ":" << newRid.slotNum << "]." << endl;
+	if (DEBUG)
+		cout << "RM::update - No enough space; inserted the data at [" << newRid.pageNum << ":" << newRid.slotNum << "]." << endl;
 
 	// update tomb stone	// TODO: MEDIUM!! TEST
 	char tuple[8];
@@ -1221,7 +1269,8 @@ RC RM::update(PF_FileHandle &handle, const void *data, const unsigned size, cons
 	updateDirectory(directory, count, idCopy.slotNum, size);
 	writeDirectory(page, directory, count);
 	handle.WritePage(idCopy.pageNum, page);
-	cout << "RM::update - Updated tomb stone at [" << idCopy.pageNum << ":" << idCopy.slotNum << "]." << endl;
+	if (DEBUG)
+		cout << "RM::update - Updated tomb stone at [" << idCopy.pageNum << ":" << idCopy.slotNum << "]." << endl;
 
 	return 0;
 }
@@ -1339,7 +1388,8 @@ RC RM::reoranizeTBL(PF_FileHandle &handle)
 		void *pagesIn[pageInCount];
 		unsigned startIn = REORGANIZE_LOAD * load;
 		loadPages(handle, startIn, pagesIn, pageInCount);	// load a batch of pages
-		cout << "RM::reoranizeTBL - Loaded " << pageInCount << " page(s) from the table." << endl;
+		if (DEBUG)
+			cout << "RM::reoranizeTBL - Loaded " << pageInCount << " page(s) from the table." << endl;
 
 		Slot slotsIn[SLOTS_CAPACITY];
 		unsigned slotInCount = 0;
@@ -1353,14 +1403,17 @@ RC RM::reoranizeTBL(PF_FileHandle &handle)
 			{
 				if (slotsIn[rid.slotNum].flag == 1)		// the slot contains real data
 				{
-					cout << "RM::reoranizeTBL - Got one valid slot at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
+					if (DEBUG)
+						cout << "RM::reoranizeTBL - Got one valid slot at [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
 					if (slotsOut[slotOutNum].length < slotsIn[rid.slotNum].length + EACH_SLOT_INFO_LEN)	// new page is full
 					{
-						cout << "RM::reoranizeTBL - One new page is full." << endl;
+						if (DEBUG)
+							cout << "RM::reoranizeTBL - One new page is full." << endl;
 						pageOutNum++;
 						if (pageOutNum == REORGANIZE_LOAD)	// if out pages reach REORGANIZE_LOAD, write them to file
 						{
-							cout << "RM::reoranizeTBL - Read re-organization load; writing pages to file." << endl;
+							if (DEBUG)
+								cout << "RM::reoranizeTBL - Read re-organization load; writing pages to file." << endl;
 							writePages(handle, startOut, pagesOut, REORGANIZE_LOAD);
 							startOut += REORGANIZE_LOAD;		// update cursor for writing
 
@@ -1375,7 +1428,8 @@ RC RM::reoranizeTBL(PF_FileHandle &handle)
 					pagesOut[pageOutNum] = malloc(PF_PAGE_SIZE);
 					init(slotsOut);
 					slotOutNum = 0;
-					cout << "RM::reoranizeTBL - Initialized one new page for re-organization." << endl;
+					if (DEBUG)
+						cout << "RM::reoranizeTBL - Initialized one new page for re-organization." << endl;
 
 					// write one slot to out page
 					memcpy((char *)pagesOut[pageOutNum] + slotsOut[slotOutNum].offset,
@@ -1388,7 +1442,8 @@ RC RM::reoranizeTBL(PF_FileHandle &handle)
 					slotOutNum++;
 					slotsOut[slotOutNum] = empty;
 					writeDirectory(pagesOut[pageOutNum], slotsOut, slotOutNum);
-					cout << "RM::reoranizeTBL - Wrote one valid slot to new page at [" << startOut + pageOutNum << ":" << slotOutNum << "] and updated directory." << endl;
+					if (DEBUG)
+						cout << "RM::reoranizeTBL - Wrote one valid slot to new page at [" << startOut + pageOutNum << ":" << slotOutNum << "] and updated directory." << endl;
 				}
 			}
 		}
@@ -1401,7 +1456,8 @@ RC RM::reoranizeTBL(PF_FileHandle &handle)
 	unsigned leftPageCount = slotOutNum == 0 ? pageOutNum : pageOutNum + 1;
 	if (leftPageCount > 0)
 	{
-		cout << "RM::reoranizeTBL - Writing left " << leftPageCount << " page(s) to file." << endl;
+		if (DEBUG)
+			cout << "RM::reoranizeTBL - Writing left " << leftPageCount << " page(s) to file." << endl;
 		writePages(handle, startOut, pagesOut, leftPageCount);
 		for (unsigned pageNum = 0; pageNum < leftPageCount; pageNum++)
 			free(pagesOut[pageNum]);
@@ -1411,7 +1467,8 @@ RC RM::reoranizeTBL(PF_FileHandle &handle)
 	unsigned currentTotalPages = startOut + leftPageCount;
 	if (currentTotalPages < totalPageNum)
 	{
-		cout << "RM::reoranizeTBL - " << (totalPageNum - currentTotalPages) << " extra page(s) in the original file; clean them." << endl;
+		if (DEBUG)
+			cout << "RM::reoranizeTBL - " << (totalPageNum - currentTotalPages) << " extra page(s) in the original file; clean them." << endl;
 		for (unsigned index = currentTotalPages; index < totalPageNum; index++)
 		{
 			void *page = malloc(PF_PAGE_SIZE);
@@ -1454,7 +1511,8 @@ RC RM::appendAttribute(PF_FileHandle &handle, const char *tableName, const Attri
 		if (strcmp(_attrsCache[index].tableName.c_str(), tableName) == 0)
 		{
 			_attrsCache[index].attrs.push_back(attr);
-			cout << "RM::appendAttribute - updated attributes in cache for table [" << tableName << "]." << endl;
+			if (DEBUG)
+				cout << "RM::appendAttribute - updated attributes in cache for table [" << tableName << "]." << endl;
 		}
 	}
 
@@ -1518,13 +1576,15 @@ AttrType attrTypeof(const char *attrName, const vector<Attribute> &attrs)
 
 void projectTuple(const void *tuple, const vector<Attribute> attrs, const vector<string> &attrNames, void *data)
 {
-	cout << "Helper::projectTuple - Projecting data..." << endl;
+	if (DEBUG)
+		cout << "Helper::projectTuple - Projecting data..." << endl;
 	char recordValue[100];
 	unsigned offset = 0;
 
 	for (unsigned short index = 0; index < attrNames.size(); index++)
 	{
-		cout << "Helper::projectTuple - For attribute: " << attrNames[index] << endl;
+		if (DEBUG)
+			cout << "Helper::projectTuple - For attribute: " << attrNames[index] << endl;
 		unsigned len = 4;
 		getAttributeValue(tuple, attrs, attrNames[index].c_str(), recordValue);
 		if (attrTypeof(attrNames[index].c_str(), attrs) == AttrType(2))
@@ -1619,7 +1679,8 @@ void RM_ScanIterator::setAttrNames(const vector<string> &attrNames)
 // "data" follows the same format as RM::insertTuple()
 RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 {
-	cout << "RM_ScanIterator::getNextTuple - Getting next tuple..." << endl;
+	if (DEBUG)
+		cout << "RM_ScanIterator::getNextTuple - Getting next tuple..." << endl;
 
 	RM *rm = RM::Instance();
 	vector<Attribute> attrs;
@@ -1650,14 +1711,15 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 		{
 			void *tuple = malloc(PF_PAGE_SIZE);	// TODO: update it!
 			void *recordValue = malloc(PF_PAGE_SIZE);
-			cout << "RM_ScanIterator::getNextTuple - Analyzing slot [" << pageNum << ":" << slotNum << "]." << endl;
+			if (DEBUG)
+				cout << "RM_ScanIterator::getNextTuple - Analyzing slot [" << pageNum << ":" << slotNum << "]." << endl;
 			RID idCopy;
 			idCopy.pageNum = pageNum;
 			idCopy.slotNum = slotNum;
-			if (locateData(handle, idCopy, page, slots, count) != 0 ||
-					slots[idCopy.slotNum].flag == 0)
+			if (locateData(handle, idCopy, page, slots, count) != 0 || slots[idCopy.slotNum].flag == 0)
 			{
-				cout << "RM_ScanIterator::getNextTuple - Invalid data at [" << pageNum << ":" << slotNum << "]; skipping." << endl;
+				if (DEBUG)
+					cout << "RM_ScanIterator::getNextTuple - Invalid data at [" << pageNum << ":" << slotNum << "]; skipping." << endl;
 				slotNum++;
 				continue;
 			}
@@ -1665,7 +1727,8 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 
 			if (this->_compOp != CompOp(6))
 			{
-				cout << "RM_ScanIterator::getNextTuple - Performing comparison CompOp: " << this->_compOp << " on attribute [" << this->_conditionAttribute << "]." << endl;
+				if (DEBUG)
+					cout << "RM_ScanIterator::getNextTuple - Performing comparison CompOp: " << this->_compOp << " on attribute [" << this->_conditionAttribute << "]." << endl;
 				getAttributeValue(tuple, attrs, this->_conditionAttribute.c_str(), recordValue);
 
 				if (this->_value != NULL)
@@ -1686,7 +1749,8 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 
 					if (!compare(recordValue, this->_compOp, this->_value, type))
 					{
-						cout << "RM_ScanIterator::getNextTuple - Data at [" << pageNum << ":" << slotNum << "] does not meet criterion." << endl;
+						if (DEBUG)
+							cout << "RM_ScanIterator::getNextTuple - Data at [" << pageNum << ":" << slotNum << "] does not meet criterion." << endl;
 						slotNum++;
 						free(recordValue);
 						free(tuple);
@@ -1695,7 +1759,8 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 				}
 			}
 
-			cout << "RM_ScanIterator::getNextTuple - Found one valid record at [" << pageNum << ":" << slotNum << "]." << endl;
+			if (DEBUG)
+				cout << "RM_ScanIterator::getNextTuple - Found one valid record at [" << pageNum << ":" << slotNum << "]." << endl;
 			this->_slotNum = slotNum;
 			projectTuple(tuple, attrs, this->_attributeNames, data);
 			free(recordValue);
@@ -1716,7 +1781,8 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 
 	if (pageNum >= totalPageNum)
 	{
-		cout << "RM_ScanIterator::getNextTuple - Reach the end of table." << endl;
+		if (DEBUG)
+			cout << "RM_ScanIterator::getNextTuple - Reach the end of table." << endl;
 		return RM_EOF;
 	}
 
