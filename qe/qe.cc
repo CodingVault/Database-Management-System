@@ -805,7 +805,7 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 		hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].offset + length);
 	    memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].offset, data, length);
 		hash_table[hashNum].offset += length;
-//		if (DEBUG)
+		if (DEBUG)
 		{
 			count++;
 			if (count % 50 == 0)
@@ -815,7 +815,7 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 			}
 		}
 	}
-//	if (DEBUG)
+	if (DEBUG)
 		cout << "HashJoin::partition - Hashed " << count << " tuples in total." << endl;
 
 	// flush rest data in the buffer to disk
