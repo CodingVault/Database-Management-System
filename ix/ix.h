@@ -15,6 +15,7 @@ using namespace std;
 
 typedef enum {
 	SUCCESS = 0,
+	END_OF_SCAN = -1,	// Not an error
 
 	// General codes
 	INVALID_OPERATION = 1,
@@ -38,7 +39,6 @@ typedef enum {
 	CLOSE_INDEX_HANDLE_ERROR,
 
 	// IX_IndexScan
-	END_OF_SCAN = 30,	// Not an error
 	INVALID_INDEX_HANDLE,
 	INVALIDE_INPUT_DATA,
 	OPEN_SCAN_ERROR,
@@ -236,8 +236,8 @@ class IX_IndexScan {
 
  private:
   bool isOpen;
-  char keyValue[PF_PAGE_SIZE];
-  void* skipValue;
+  void *keyValue;
+  void *skipValue;
   CompOp compOp;
   IX_IndexHandle* indexHandle;
 };

@@ -2089,10 +2089,15 @@ IX_IndexScan::IX_IndexScan()
 {
 	this->isOpen = false;
 	this->skipValue = NULL;
+	this->keyValue = NULL;
 }
 
 IX_IndexScan::~IX_IndexScan()
 {
+	if (this->keyValue)
+		free(this->keyValue);
+	if (this->skipValue)
+		free(this->skipValue);
 }
 
 RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
@@ -2131,6 +2136,7 @@ RC IX_IndexScan::OpenScan(const IX_IndexHandle &indexHandle,
 		}
 		else
 		{
+			this->keyValue = malloc(4);
 			memcpy(this->keyValue, value, 4);
 		}
 	}
@@ -2149,6 +2155,9 @@ RC IX_IndexScan::CloseScan()
 	}
 
 	this->indexHandle = NULL;
+	if (this->keyValue)
+		free(this->keyValue);
+	this->keyValue = NULL;
 	if (this->skipValue)
 		free(this->skipValue);
 	this->skipValue = NULL;
@@ -2159,8 +2168,11 @@ RC IX_IndexScan::CloseScan()
 
 RC IX_IndexScan::GetNextEntry(RID &rid)
 {
+	if (DEBUG)
+		cout << "IX_IndexScan::GetNextEntry - Getting next tuple for OP: " << this->compOp << endl;
 	if (this->compOp == NO_OP || this->compOp == NE_OP)
 	{
+		this->keyValue = malloc(4);
 		RC rc = this->indexHandle->GetMinKey(this->keyValue);
 		if (rc != SUCCESS)
 		{
@@ -2172,6 +2184,11 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 		this->compOp = GE_OP;
 	}
 
+	// up to this point, this->keyValue must not NULL to continue processing;
+	// otherwise, input is invalid or the end has been met
+	if (this->keyValue == NULL)
+		return END_OF_SCAN;
+
 	// transform LE_OP to (EQ_OP + LT_OP) and GT_OP to (EQ_OP + GT_OP)
 	CompOp op = (this->compOp == LE_OP || this->compOp == GE_OP) ? EQ_OP : this->compOp;
 	if (this->indexHandle->GetEntry(this->keyValue, op, rid) != SUCCESS)
@@ -2179,13 +2196,18 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 		return END_OF_SCAN;
 	}
 	if (DEBUG)
-	{
 		cout << "IX_IndexScan::GetNextEntry - Found one entry [" << rid.pageNum << ":" << rid.slotNum << "]." << endl;
-	}
 	this->compOp = this->compOp == LE_OP ? LT_OP : this->compOp;
 	this->compOp = this->compOp == GE_OP ? GT_OP : this->compOp;
+	if (this->compOp == EQ_OP)
+	{
+		if (this->keyValue)
+			free(this->keyValue);
+		this->keyValue = NULL;
+	}
 
-	if (this->skipValue != NULL && strcmp(this->keyValue, (char *)this->skipValue) == 0)
+	if (this->keyValue != NULL && this->skipValue != NULL &&
+			strcmp((char *)this->keyValue, (char *)this->skipValue) == 0)
 		return GetNextEntry(rid);
 
 	return SUCCESS;
