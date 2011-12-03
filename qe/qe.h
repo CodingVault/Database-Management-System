@@ -2,6 +2,8 @@
 #define _qe_h_
 
 #include <vector>
+#include <iostream>
+#include <cmath>
 
 #include "../pf/pf.h"
 #include "../rm/rm.h"
@@ -9,12 +11,15 @@
 
 #define QE_EOF (-1)  // end of the index scan
 #define INCOMPLIANCE (-2)
+#define NOT_FOUND (-3)
 #define BUFF_SIZE PF_PAGE_SIZE
 
 using namespace std;
 
-typedef enum{ MIN = 0, MAX, SUM, AVG, COUNT } AggregateOp;
+#define LEFT_PARTITION_PREFIX "HJ_LEFT_PAR_"
+#define RIGHT_PARTITION_PREFIX "HJ_RIGHT_PAR_"
 
+typedef enum{ MIN = 0, MAX, SUM, AVG, COUNT } AggregateOp;
 
 
 // The following functions use  the following 
@@ -31,6 +36,11 @@ struct Value {
 struct Buff {
 	AttrLength length;
 	void       *data;
+};
+
+struct Bucket {
+	unsigned offset;
+	void     *data;
 };
 
 struct Condition {
@@ -256,9 +266,28 @@ class HashJoin : public Iterator {
         
         ~HashJoin();
 
-        RC getNextTuple(void *data) {return QE_EOF;};
+        RC getNextTuple(void *data);
         // For attribute in vector<Attribute>, name it as rel.attr
         void getAttributes(vector<Attribute> &attrs) const;
+
+    protected:
+        RC writeBucket(vector<Bucket> &ht, const unsigned pos, const string file_prefix);
+        RC partition(Iterator *iterator, const vector<Attribute> &attrs, const string &attr, const string file_prefix);
+        RC buildHashtable(PF_FileHandle &filehandle, vector<Bucket> &hash_table);
+        RC join(const void *left_tuple, const unsigned left_tuple_length, const vector<Bucket> &hash_table, void *data);
+
+    private:
+        Iterator* leftIn;
+        Iterator* rightIn;
+        Condition condition;
+        unsigned bufferSize;
+        AttrType attrType;
+        vector<Attribute> left_attrs;
+        vector<Attribute> right_attrs;
+
+        unsigned bktNum;
+        unsigned leftBktPageNum;
+        unsigned leftBktPageOffset;
 };
 
 

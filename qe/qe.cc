@@ -1,6 +1,5 @@
 
-# include "qe.h"
-# include <iostream>
+#include "qe.h"
 
 #define DEBUG true
 
@@ -387,7 +386,7 @@ IndexScan::~IndexScan()
 /*
  * get a specified attribute in a tuple
  */
-void getAttrValue(void*data, void*attr_data, vector<Attribute> attrs, string selectAttr)
+void getAttrValue(const void*data, void*attr_data, const vector<Attribute> attrs, const string selectAttr)
 {
 	unsigned offset = 0;
 	for(unsigned i = 0; i < attrs.size(); i++)
@@ -396,12 +395,14 @@ void getAttrValue(void*data, void*attr_data, vector<Attribute> attrs, string sel
 		{
 			if(attrs[i].type == TypeInt || attrs[i].type == TypeReal)
 			{
-				memcpy((char*)attr_data,(char*)data+offset,4);
+				memcpy(attr_data, (char*)data+offset, 4);
 			}
 			else
 			{
-				memcpy((char*)attr_data,(char*)data+offset+4,*((int*)(data)+offset));
-				memcpy((char*)attr_data + *((int*)(data)+offset), &("\0"),1); //add '\0'in the end
+				unsigned len = 0;
+				memcpy(&len, (char*)data+offset, 4);
+				memcpy((char*)attr_data,(char*)data+offset+4,len);
+				*((char*)attr_data + len) = '\0'; //add '\0'in the end
 			}
 			break;
 		}
@@ -411,7 +412,9 @@ void getAttrValue(void*data, void*attr_data, vector<Attribute> attrs, string sel
 	    }
 		else
 		{
-			offset += *((int*)(data) + offset) + 4;
+			unsigned len = 0;
+			memcpy(&len, (char*)data+offset, 4);
+			offset += len + 4;
 		}
 	}
 }
@@ -451,7 +454,6 @@ Filter::~Filter()
 	this->input = NULL;
 }
 /*********************************  Filter class ends **********************************************************/
-
 
 /*********************************  Index Loop Join class begins **************************************************/
 INLJoin::INLJoin (Iterator *leftIn,                               // Iterator of input R
@@ -564,12 +566,407 @@ INLJoin::~INLJoin()
 		this->left_data = NULL;
 	}
 }
-/*********************************  Index Loop Join class ends **************************************************/
+/*********************************  Index Loop Join class ends ************************************/
 
+/*********************************  Hash Join class begins ***************************************/
 
+unsigned getIntHash(unsigned value, unsigned M)
+{
+	return value % M;
+}
 
-/*********************************  Hash Join class begins **************************************************/
+unsigned getRealHash(unsigned value, unsigned M)
+{
+	const float factor = 0.61803399;
+	return (unsigned)((value * factor - floor(value * factor)) * M);
+}
 
+/*
+ * BKDR Hash
+ */
+unsigned getStringHash(char* value, unsigned M)
+{
+	unsigned seed = 131; // 31 131 1313 13131 131313 etc..
+	unsigned hash = 0;
 
-/*********************************  Hash Join class ends **************************************************/
+	while (*value)
+	{
+		hash = hash * seed + (*value++);
+	}
+
+	return (hash & 0x7FFFFFFF) % M;
+
+}
+
+unsigned getHash(char* value, AttrType type, unsigned M)
+{
+	switch(type)
+	{
+	case TypeInt:
+		return getIntHash(*(unsigned*)value, M);
+	case TypeReal:
+		return getRealHash(*(float*)value, M);
+	case TypeVarChar:
+		return getStringHash(value, M);
+	}
+	return 0;
+}
+
+unsigned getLength(void* data, vector<Attribute> attrs)
+{
+	unsigned offset = 0;
+
+	for (unsigned i = 0; i < attrs.size(); ++i)
+	{
+		unsigned shift = sizeof(int);
+		if (attrs[i].type == TypeVarChar)
+		{
+			unsigned len = 0;
+			memcpy(&len, (char *)data + offset, sizeof(int));
+			shift += len;
+		}
+		offset += shift;
+	}
+
+	return offset;
+
+}
+
+string itoa(const unsigned in)
+{
+	const unsigned zero = 48;
+	unsigned copy = in + 1;
+	string out = "";
+
+	while (copy > 0)
+	{
+		unsigned digit = copy % 10;
+		copy /= 10;
+
+		out = (char)(zero + digit) + out;
+	}
+
+	return out;
+}
+
+HashJoin::HashJoin(Iterator *leftIn,                              // Iterator of input R
+                 Iterator *rightIn,                               // Iterator of input S
+                 const Condition &condition,                      // Join condition
+                 const unsigned numPages)
+{
+	this->leftIn = leftIn;
+	this->rightIn = rightIn;
+	this->condition = condition;
+	this->bufferSize = numPages;	// TODO: should be fewer due to other use of memory???
+	this->leftIn->getAttributes(this->left_attrs);
+	this->rightIn->getAttributes(this->right_attrs);
+
+	this->bktNum = 0;
+	this->leftBktPageNum = 0;
+	this->leftBktPageOffset = sizeof(int);
+
+	for (unsigned i = 0; i < this->left_attrs.size(); i++)
+	{
+		if (this->left_attrs[i].name == this->condition.lhsAttr)
+		{
+			this->attrType = this->left_attrs[i].type;
+			break;
+		}
+	}
+
+	this->partition(this->leftIn, this->left_attrs, this->condition.lhsAttr, LEFT_PARTITION_PREFIX);
+	this->partition(this->rightIn, this->right_attrs, this->condition.rhsAttr, RIGHT_PARTITION_PREFIX);
+}
+
+HashJoin::~HashJoin()
+{
+}
+
+void printTuples(void *data, const vector<Attribute> &attrs)
+{
+	cout << "****Printing tuple begin****" << endl;
+	unsigned offset = 0;
+	int iValue = 0;
+	float fValue = 0.0;
+	for (unsigned i = 0; i < attrs.size(); ++i)
+	{
+		switch (attrs[i].type)
+		{
+		case TypeInt:
+			memcpy(&iValue, (char *)data + offset, sizeof(int));
+			cout << attrs[i].name << ": " << iValue << endl;
+			offset += sizeof(int);
+			break;
+		case TypeReal:
+			memcpy(&fValue, (char *)data + offset, sizeof(float));
+			cout << attrs[i].name << ": " << fValue << endl;
+			offset += sizeof(int);
+			break;
+		case TypeVarChar:
+			memcpy(&iValue, (char *)data + offset, sizeof(int));
+			offset += sizeof(int);
+			char *temp = (char *)malloc(iValue);
+			memcpy(temp, (char *)data + offset, iValue);
+			offset += iValue;
+			temp[iValue] = '\0';
+			cout << attrs[i].name << ": " << temp << endl;
+			break;
+		}
+	}
+	cout << "****Printing tuple end****" << endl << endl;
+}
+
+/**
+ * Partitions input (iterator) tuples to buckets.
+ */
+RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const string &attr, const string file_prefix)
+{
+	void* data = malloc(PF_PAGE_SIZE);
+	char* attr_data = (char *) malloc(PF_PAGE_SIZE);
+
+	PF_Manager* pf_manager = PF_Manager::Instance();
+	Bucket defQ;
+	defQ.offset = sizeof(int);	// space to store last offset of data in bucket
+	defQ.data = NULL;
+	vector<Bucket> hash_table(this->bufferSize, defQ);
+
+	// create empty files for each bucket of left table	// TODO: create files when necessary
+	for (unsigned i = 0; i < this->bufferSize; i++)
+		pf_manager->CreateFile((file_prefix + itoa(i)).c_str());
+
+	while (iterator->getNextTuple(data) != QE_EOF)
+	{
+		getAttrValue(data, attr_data, attrs, attr);
+		unsigned hashNum = getHash(attr_data, this->attrType, this->bufferSize);
+		unsigned length = getLength(data, attrs);
+
+		// if the bucket is full, write it to disk
+		if (hash_table[hashNum].offset + length > PF_PAGE_SIZE)
+			this->writeBucket(hash_table, hashNum, file_prefix);
+
+		if (DEBUG)
+			cout << "HashJoin::partition - Putting data to bucket [" << hashNum << "]." << endl;
+		hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].offset + length);
+	    memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].offset, data, length);
+		hash_table[hashNum].offset += length;
+	}
+
+	// flush rest data in the buffer to disk
+	for (unsigned i = 0; i < this->bufferSize; ++i)
+	{
+		if (hash_table[i].data != NULL)
+			this->writeBucket(hash_table, i, file_prefix);
+	}
+
+	free(attr_data);
+	free(data);
+
+	return SUCCESS;
+}
+
+// TODO: what if fail to operate files?
+/**
+ * Append one page to the bucket on disk and resets the corresponding container in hash table.
+ * The size of total data on the page is stored at the beginning of the page.
+ */
+RC HashJoin::writeBucket(vector<Bucket> &ht, const unsigned pos, const string file_prefix)
+{
+	if (DEBUG)
+		cout << "HashJoin::writeBucket - Writing data for bucket [" << pos << "]." << endl;
+
+	PF_Manager* pf_manager = PF_Manager::Instance();
+	PF_FileHandle filehandle;
+	pf_manager->OpenFile((file_prefix + itoa(pos)).c_str(), filehandle);
+	memcpy(ht[pos].data, &ht[pos].offset, sizeof(int));
+	filehandle.AppendPage(ht[pos].data);
+	pf_manager->CloseFile(filehandle);
+
+	// reset the bucket
+	free(ht[pos].data);
+	ht[pos].data = NULL;
+	ht[pos].offset = sizeof(int);
+
+	return SUCCESS;
+}
+
+RC HashJoin::getNextTuple(void* data)
+{
+	PF_Manager* pf_manager = PF_Manager::Instance();
+	PF_FileHandle right_filehandle;
+	PF_FileHandle left_filehandle;
+
+	while (this->bktNum < this->bufferSize)
+	{
+		string right_fileName = RIGHT_PARTITION_PREFIX + itoa(this->bktNum);
+		string left_fileName = LEFT_PARTITION_PREFIX + itoa(this->bktNum);
+
+		// find one bucket containing data from the smaller table
+		pf_manager->OpenFile(right_fileName.c_str(), right_filehandle);
+		if (right_filehandle.GetNumberOfPages() == 0)
+		{
+			pf_manager->CloseFile(right_filehandle);
+			pf_manager->DestroyFile(right_fileName.c_str());
+			pf_manager->DestroyFile(left_fileName.c_str());
+			this->bktNum++;
+			continue;
+		}
+
+		// build in-memory hash table for current bucket of the smaller table
+		Bucket defQ;
+		defQ.offset = sizeof(int);	// space to store last offset of data in bucket
+		defQ.data = NULL;
+		vector<Bucket> hash_table(this->bufferSize, defQ);
+		this->buildHashtable(right_filehandle, hash_table);
+		if (DEBUG)
+			cout << "HashJoin::getNextTuple - Put bucket [" << this->bktNum << "] of smaller table in memory." << endl;
+
+		// retrieve tuples from the bigger table to perform join
+		pf_manager->OpenFile(left_fileName.c_str(), left_filehandle);
+		while (this->leftBktPageNum < left_filehandle.GetNumberOfPages())
+		{
+			void *page = malloc(PF_PAGE_SIZE);
+			left_filehandle.ReadPage(this->leftBktPageNum, page);
+			unsigned size = 0;
+			memcpy(&size, page, sizeof(int));
+
+			// read tuples from current page
+			while (this->leftBktPageOffset < size)
+			{
+				unsigned left_tuple_length = getLength((char *)page + this->leftBktPageOffset, this->left_attrs);
+				void *left_tuple = malloc(left_tuple_length);
+				memcpy(left_tuple, (char *)page + this->leftBktPageOffset, left_tuple_length);
+				this->leftBktPageOffset += left_tuple_length;
+
+				// join tuples
+				RC rc = this->join(left_tuple, left_tuple_length, hash_table, data);
+				free(left_tuple);
+
+				if (rc == SUCCESS)
+				{
+					free(page);
+					for (unsigned i = 0; i < this->bufferSize; ++i)
+						if (hash_table[i].data)
+							free(hash_table[i].data);
+
+					// close bucket files
+					pf_manager->CloseFile(left_filehandle);
+					pf_manager->CloseFile(right_filehandle);
+
+					return SUCCESS;
+				}
+			}
+
+			free(page);
+			// resets page offset and continue to read next page
+			this->leftBktPageOffset = sizeof(int);
+			this->leftBktPageNum++;
+		}
+
+		for (unsigned i = 0; i < this->bufferSize; ++i)
+			if (hash_table[i].data)
+				free(hash_table[i].data);
+
+		// no valid join tuple found; resets page number and continue to read next bucket
+		this->leftBktPageNum = 0;
+		this->bktNum++;
+
+		// close bucket files and remove them
+		pf_manager->CloseFile(left_filehandle);
+		pf_manager->CloseFile(right_filehandle);
+		pf_manager->DestroyFile(left_fileName.c_str());
+		pf_manager->DestroyFile(right_fileName.c_str());
+	}
+
+	return QE_EOF;
+}
+
+RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, const vector<Bucket> &hash_table, void *data)
+{
+	if (DEBUG)
+		cout << "HashJoin::join - Trying to join..." << endl;
+
+	// hash left attribute in condition
+	char *left_attr_data = (char *) malloc(left_tuple_length);
+	getAttrValue(left_tuple, left_attr_data, this->left_attrs, this->condition.lhsAttr);
+	unsigned hashNum = getHash(left_attr_data, this->attrType, this->bufferSize);	// TODO: !!! update it to another hash function !!!
+
+	// if cannot be found in hash table, return
+	if (hash_table[hashNum].data == NULL)
+		return NOT_FOUND;
+
+	unsigned right_tuple_length = 0;
+	unsigned offset = sizeof(int);
+	while (offset < hash_table[hashNum].offset)
+	{
+		right_tuple_length = getLength((char *)hash_table[hashNum].data + offset, this->right_attrs);
+		void *right_tuple = malloc(right_tuple_length);
+		memcpy(right_tuple, (char *)hash_table[hashNum].data + offset, right_tuple_length);
+
+		char *right_attr_data = (char *) malloc(right_tuple_length);
+		getAttrValue(right_tuple, right_attr_data, this->right_attrs, this->condition.rhsAttr);
+		free(right_tuple);
+
+		if (compare(left_attr_data, EQ_OP, right_attr_data, this->attrType))
+		{
+			cout << "HashJoin::join - Found one tuple to join." << endl;
+			free(right_attr_data);
+			break;
+		}
+		free(right_attr_data);
+		offset += right_tuple_length;
+	}
+	free(left_attr_data);
+
+	// found one tuple to join
+	if (offset < hash_table[hashNum].offset)
+	{
+		memcpy(data, left_tuple, left_tuple_length);
+		memcpy((char *)data + left_tuple_length, (char *)hash_table[hashNum].data + offset, right_tuple_length);
+		return SUCCESS;
+	}
+
+	return NOT_FOUND;
+}
+
+RC HashJoin::buildHashtable(PF_FileHandle &filehandle, vector<Bucket> &hash_table)
+{
+	for (unsigned pageNum = 0; pageNum < filehandle.GetNumberOfPages(); ++pageNum)
+	{
+		void *page = malloc(PF_PAGE_SIZE);
+		filehandle.ReadPage(pageNum, page);
+		unsigned size = 0;
+		memcpy(&size, page, sizeof(int));
+
+		unsigned offset = sizeof(int);
+		while (offset < size)
+		{
+			unsigned length = getLength((char *)page + offset, this->right_attrs);
+			void *tuple = malloc(length);
+			memcpy(tuple, (char *)page + offset, length);
+			offset += length;
+
+			char *attr_data = (char *) malloc(length);
+			getAttrValue(tuple, attr_data, this->right_attrs, this->condition.rhsAttr);
+			unsigned hashNum = getHash(attr_data, this->attrType, this->bufferSize);	// TODO: !!! update it to another hash function !!!
+			hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].offset + length);
+			memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].offset, tuple, length);
+			hash_table[hashNum].offset += length;
+
+			free(attr_data);
+			free(tuple);
+		}
+		free(page);
+	}
+
+	return SUCCESS;
+}
+
+void HashJoin::getAttributes(vector<Attribute> &attrs) const
+{
+	attrs.clear();
+	attrs = this->left_attrs;
+	attrs.insert(attrs.end(), this->right_attrs.begin(), this->right_attrs.end());
+}
+
+/*********************************  Hash Join class ends ******************************************/
 

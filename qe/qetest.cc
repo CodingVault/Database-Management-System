@@ -289,9 +289,9 @@ void opTest()
 	attrNames.push_back(empTableName + ".DeptNo");
 
 	cout << "******* Test Project Begin *******" << endl;
-	Project project(empScan, attrNames);
-	project.getAttributes(attrs);
-	while (project.getNextTuple(data) != QE_EOF)
+	Project *project = new Project(empScan, attrNames);
+	project->getAttributes(attrs);
+	while (project->getNextTuple(data) != QE_EOF)
 		printTuple(data, attrs);
 	cout << "******* Test Project End *******" << endl << endl;
 
@@ -304,15 +304,27 @@ void opTest()
 	empScan->setIterator();
 	deptScan->setIterator();
 	cout << "******* Test NLJoin Begin *******" << endl;
-	NLJoin *nlJoin  = new NLJoin(empScan, deptScan, cond_j, 10000);
+	NLJoin *nlJoin  = new NLJoin(empScan, deptScan, cond_j, 1000);
 	nlJoin->getAttributes(attrs);
 	printAttribute(attrs);
 	while (nlJoin->getNextTuple(data) != QE_EOF)
 		printTuple(data, attrs);
 	cout << "******* Test NLJoin End *******" << endl << endl;
 
+	empScan->setIterator();
+	deptScan->setIterator();
+	cout << "******* Test HashJoin Begin *******" << endl;
+	HashJoin *hashJoin = new HashJoin(project, deptScan, cond_j, 1000);
+	hashJoin->getAttributes(attrs);
+	while (hashJoin->getNextTuple(data) != QE_EOF)
+		printTuple(data, attrs);
+	cout << "******* Test HashJoin End *******" << endl << endl;
+
 	free(data);
 	free(value.data);
+//	delete hashJoin;
+	delete nlJoin;
+	delete project;
 	delete empScan;
 	delete deptScan;
 }
