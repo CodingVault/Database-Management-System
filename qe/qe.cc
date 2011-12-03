@@ -175,49 +175,26 @@ RC NLJoin::getNextTuple(void *data)
 	{
 		this->_leftTuple = malloc(BUFF_SIZE);
 		if (this->_left->getNextTuple(this->_leftTuple) == QE_EOF)
+		{
+			free(this->_leftTuple);
+			this->_leftTuple = NULL;
+			if (this->_leftValue)
+			{
+				free(this->_leftValue);
+				this->_leftValue = NULL;
+			}
 			return QE_EOF;
+		}
 	}
 
 	// get one tuple from right table
 	void *rightTuple = malloc(BUFF_SIZE);
-	if (this->_right->getNextTuple(rightTuple) != QE_EOF)
+	if (this->_right->getNextTuple(rightTuple) == QE_EOF)	// reach the end of right table
 	{
-		// prepare values for join condition
-		RC rc = getLeftValue();	// get the type of attribute simultaneously
+		free(rightTuple);
+
 		if (DEBUG)
-		{
-			cout << "NLJoin::getNextTuple - Left value: ";
-			printValue(this->_leftValue, this->_attrType);
-		}
-		if (rc != SUCCESS)
-			return rc;
-
-		char *rightValue;
-		rightValue = (char *) malloc(BUFF_SIZE);
-		getRightValue(rightTuple, rightValue);
-		if (DEBUG)
-		{
-			cout << "NLJoin::getNextTuple - Right value: ";
-			printValue(rightValue, this->_attrType);
-		}
-
-		// get lengths of both tuples
-		unsigned leftLen = this->getLeftLength();
-		unsigned rightLen = this->getRightLength(rightTuple);
-
-		// compare
-		if (compare(this->_leftValue, this->_condition.op, rightValue, this->_attrType))
-		{
-			memcpy(data, this->_leftTuple, leftLen);
-			memcpy((char *)data + leftLen, rightTuple, rightLen);
-
-			return SUCCESS;
-		}
-		free(rightValue);
-	}
-	else
-	{
-		cout << "NLJoin::getNextTuple - Preparing for reading next left tuple." << endl;
+			cout << "NLJoin::getNextTuple - Preparing for reading next left tuple." << endl;
 		free(this->_leftTuple);
 		this->_leftTuple = NULL;
 		if (this->_leftValue)
@@ -228,6 +205,50 @@ RC NLJoin::getNextTuple(void *data)
 		this->_right->setIterator();
 		return getNextTuple(data);
 	}
+
+	// prepare values for join condition
+	RC rc = getLeftValue();	// get the type of attribute simultaneously
+	if (DEBUG)
+	{
+		cout << "NLJoin::getNextTuple - Left value: ";
+		printValue(this->_leftValue, this->_attrType);
+	}
+	if (rc != SUCCESS)
+	{
+		free(rightTuple);
+		free(this->_leftTuple);
+		this->_leftTuple = NULL;
+		if (this->_leftValue)
+		{
+			free(this->_leftValue);
+			this->_leftValue = NULL;
+		}
+		return rc;
+	}
+
+	void *rightValue = malloc(BUFF_SIZE);
+	getRightValue(rightTuple, rightValue);
+	if (DEBUG)
+	{
+		cout << "NLJoin::getNextTuple - Right value: ";
+		printValue(rightValue, this->_attrType);
+	}
+
+	// get lengths of both tuples
+	unsigned leftLen = this->getLeftLength();
+	unsigned rightLen = this->getRightLength(rightTuple);
+
+	// compare
+	if (compare(this->_leftValue, this->_condition.op, rightValue, this->_attrType))
+	{
+		memcpy(data, this->_leftTuple, leftLen);
+		memcpy((char *)data + leftLen, rightTuple, rightLen);
+
+		free(rightValue);
+		free(rightTuple);
+		return SUCCESS;
+	}
+	free(rightValue);
 	free(rightTuple);
 
 	return getNextTuple(data);
@@ -573,8 +594,7 @@ RC INLJoin::getNextTuple(void *data)
 		while( this->rightIn->getNextTuple(right_data) != QE_EOF)
 	    {// loop in the inner relation
 		    getAttrValue(right_data, right_attr_data, this->right_attrs, this->condition.rhsAttr);
-		    if( compare(left_attr_data, this->condition.op,
-			    	right_attr_data, this->type) )
+		    if( compare(left_attr_data, this->condition.op, right_attr_data, this->type) )
 		    {
 		    	//join the two tuples
 		    	joinTuples( data, this->left_data, right_data, this->left_attrs, this->right_attrs );

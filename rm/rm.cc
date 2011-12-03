@@ -1695,7 +1695,6 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 		return -1;
 	}
 
-	void *page = malloc(PF_PAGE_SIZE);
 	Slot slots[SLOTS_CAPACITY];
 	unsigned count = 0;
 
@@ -1703,14 +1702,15 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 	unsigned pageNum = this->_pageNum;
 	while (pageNum < totalPageNum)
 	{
+		void *page = malloc(PF_PAGE_SIZE);
 		this->_pageNum = pageNum;
 		handle.ReadPage(pageNum, page);
 		count = readDirectory(page, slots);
 		unsigned slotNum = this->_slotNum + 1;
+		void *tuple = malloc(PF_PAGE_SIZE);	// TODO: update it!
+		void *recordValue = malloc(PF_PAGE_SIZE);
 		while (slotNum < count)
 		{
-			void *tuple = malloc(PF_PAGE_SIZE);	// TODO: update it!
-			void *recordValue = malloc(PF_PAGE_SIZE);
 			if (DEBUG)
 				cout << "RM_ScanIterator::getNextTuple - Analyzing slot [" << pageNum << ":" << slotNum << "]." << endl;
 			RID idCopy;
@@ -1752,8 +1752,6 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 						if (DEBUG)
 							cout << "RM_ScanIterator::getNextTuple - Data at [" << pageNum << ":" << slotNum << "] does not meet criterion." << endl;
 						slotNum++;
-						free(recordValue);
-						free(tuple);
 						continue;
 					}
 				}
@@ -1763,15 +1761,16 @@ RC RM_ScanIterator::getNextTuple(RID &rid, void *data)
 				cout << "RM_ScanIterator::getNextTuple - Found one valid record at [" << pageNum << ":" << slotNum << "]." << endl;
 			this->_slotNum = slotNum;
 			projectTuple(tuple, attrs, this->_attributeNames, data);
-			free(recordValue);
-			free(tuple);
 			break;
 		}
+		free(recordValue);
+		free(tuple);
+		free(page);
 
 		if (slotNum < count)
 			break;
 		pageNum++;
-		this->_slotNum = 0;
+		this->_slotNum = -1;
 	}
 
 	if (manager->CloseFile(handle) != 0)
