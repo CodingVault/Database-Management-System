@@ -654,7 +654,8 @@ INLJoin::~INLJoin()
 
 unsigned getIntHash(unsigned value, unsigned M)
 {
-	return value % M;
+	srand(value);
+	return rand() % M;
 }
 
 unsigned getRealHash(unsigned value, unsigned M)
@@ -680,7 +681,7 @@ unsigned getStringHash(char* value, unsigned M)
 
 }
 
-unsigned getHash(char* value, AttrType type, unsigned M)
+unsigned getPartitionHash(char* value, AttrType type, unsigned M)
 {
 	switch(type)
 	{
@@ -690,6 +691,20 @@ unsigned getHash(char* value, AttrType type, unsigned M)
 		return getRealHash(*(float*)value, M);
 	case TypeVarChar:
 		return getStringHash(value, M);
+	}
+	return 0;
+}
+
+unsigned getJoinHash(char* value, AttrType type, unsigned M)
+{
+	switch(type)
+	{
+	case TypeInt:
+		return getIntHash(*(unsigned*)value, 2 * M) % M;
+	case TypeReal:
+		return getRealHash(*(float*)value, 2 * M) % M;
+	case TypeVarChar:
+		return getStringHash(value, 2 * M) % M;
 	}
 	return 0;
 }
@@ -784,7 +799,7 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 		unsigned length = getLength(data, attrs);
 		char* attr_data = (char *) malloc(length);
 		getAttrValue(data, attr_data, attrs, attr);
-		unsigned hashNum = getHash(attr_data, this->attrType, this->bktSize);
+		unsigned hashNum = getPartitionHash(attr_data, this->attrType, this->bktSize);
 		free(attr_data);
 
 		// if the bucket is full, write it to disk
@@ -942,7 +957,7 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 	// hash left attribute in condition
 	char *left_attr_data = (char *) malloc(left_tuple_length);
 	getAttrValue(left_tuple, left_attr_data, this->left_attrs, this->condition.lhsAttr);
-	unsigned hashNum = getHash(left_attr_data, this->attrType, this->htSize);	// TODO: !!! update it to another hash function !!!
+	unsigned hashNum = getJoinHash(left_attr_data, this->attrType, this->htSize);	// TODO: !!! update it to another hash function !!!
 
 	// if cannot be found in hash table, return
 	if (hash_table[hashNum].data == NULL)
@@ -1005,7 +1020,7 @@ RC HashJoin::buildHashtable(PF_FileHandle &filehandle, vector<Bucket> &hash_tabl
 
 			char *attr_data = (char *) malloc(length);
 			getAttrValue(tuple, attr_data, this->right_attrs, this->condition.rhsAttr);
-			unsigned hashNum = getHash(attr_data, this->attrType, this->htSize);	// TODO: !!! update it to another hash function !!!
+			unsigned hashNum = getJoinHash(attr_data, this->attrType, this->htSize);	// TODO: !!! update it to another hash function !!!
 			hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].length + length);
 			memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].length, tuple, length);
 			hash_table[hashNum].length += length;
