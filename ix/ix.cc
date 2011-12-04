@@ -144,7 +144,7 @@ void PrintTree(const BTree<KEY> *tree)
 		BTreeNode<KEY> *node = procNodes.front();
 		if (node == NULL)
 		{
-			cout << endl << "LEVEL " << level++ << " ["<< procNodes.size() << " node(s)]: ";
+			cout << endl << "LEVEL " << level++ << " ["<< procNodes.size() - 1 << " node(s)]: ";
 			procNodes.pop();
 			procNodes.push(NULL);
 			node = procNodes.front();
@@ -306,8 +306,8 @@ RC BTree<KEY>::Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, c
 	leafNode->keys.insert(itKey, key);
 	vector<RID>::iterator itRID = leafNode->rids.begin() + pos;
 	leafNode->rids.insert(itRID, rid);
-	this->_updated_nodes.push_back(leafNode);
 
+	// NOTE: new node must be pushed to _updated_nodes first, so the page number info can be updated to relevant nodes
 	RC rc = SUCCESS;
 	if (leafNode->keys.size() > this->_order * 2)	// need to split
 	{
@@ -327,6 +327,7 @@ RC BTree<KEY>::Insert(const KEY key, const RID &rid, BTreeNode<KEY> *leafNode, c
 		// update parent
 		rc = this->Insert(newNode);
 	}
+	this->_updated_nodes.push_back(leafNode);
 
 	return rc;
 }
@@ -359,7 +360,6 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 
 	vector<int>::iterator itChildrenPageNums = parent->childrenPageNums.begin() + rightNode->pos;
 	parent->childrenPageNums.insert(itChildrenPageNums, rightNode->pageNum);	// insert -1 in effect
-	this->_updated_nodes.push_back(parent);
 
 	// update children's positions
 	for (unsigned index = rightNode->pos + 1; index < parent->childrenPageNums.size(); index++)
@@ -370,6 +370,7 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 		}
 	}
 
+	// NOTE: new node must be pushed to _updated_nodes first, so the page number info can be updated to relevant nodes
 	RC rc = SUCCESS;
 	if (parent->keys.size() > this->_order * 2)	// need to split
 	{
@@ -402,6 +403,7 @@ RC BTree<KEY>::Insert(BTreeNode<KEY> *rightNode)
 		// update parent
 		rc = this->Insert(newNode);
 	}
+	this->_updated_nodes.push_back(parent);
 
 	return rc;
 }
@@ -1279,7 +1281,7 @@ RC BTree<KEY>::DeleteTree(BTreeNode<KEY> *Node)
 
 
 template <typename KEY>
-vector<BTreeNode<KEY>*> BTree<KEY>::GetUpdatedNodes() const
+vector<BTreeNode<KEY>*> BTree<KEY>::GetUpdatedNodes()
 {
 	return this->_updated_nodes;
 }
@@ -1576,26 +1578,78 @@ BTreeNode<KEY>* IX_IndexHandle::ReadNode(const unsigned pageNum, const NodeType 
 	return node;
 }
 
-/**
- * Writes node data to file, and update page number for the node.
- */
 template <typename KEY>
-RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
+RC IX_IndexHandle::WriteNode(BTreeNode<KEY>* node)
 {
 	const unsigned KEY_LENGTH = 4;
 	const unsigned RID_LENGTH = 8;
 	const unsigned PAGE_NUM_LENGTH = 4;
 
-	for (unsigned nodeCnt = 0; nodeCnt < nodes.size(); nodeCnt++)
+	void *page = malloc(PF_PAGE_SIZE);
+	unsigned offset = 0;
+	unsigned size = node->keys.size();
+	memcpy(page, &size, 4);
+	offset += 4;
+
+	if (node->type == NodeType(1))	// leaf node
+	{
+		memcpy((char *)page + offset, &node->leftPageNum, PAGE_NUM_LENGTH);
+		offset += PAGE_NUM_LENGTH;
+		memcpy((char *)page + offset, &node->rightPageNum, PAGE_NUM_LENGTH);
+		offset += PAGE_NUM_LENGTH;
+
+		for (unsigned index = 0; index < node->keys.size(); index++)
+		{
+			memcpy((char *)page + offset, &node->keys[index], KEY_LENGTH);
+			offset += KEY_LENGTH;
+			memcpy((char *)page + offset, &node->rids[index], RID_LENGTH);
+			offset += RID_LENGTH;
+		}
+	}
+	else	// non-leaf node
+	{
+		for (unsigned index = 0; index < node->keys.size(); index++)
+		{
+			memcpy((char *)page + offset, &node->childrenPageNums[index], PAGE_NUM_LENGTH);
+			offset += PAGE_NUM_LENGTH;
+			memcpy((char *)page + offset, &node->keys[index], KEY_LENGTH);
+			offset += KEY_LENGTH;
+		}
+		if (node->childrenPageNums.size() > 1)
+			memcpy((char *)page + offset, &node->childrenPageNums[node->childrenPageNums.size() - 1], PAGE_NUM_LENGTH);
+	}
+
+	if (this->_pf_handle->WritePage(node->pageNum, page) != SUCCESS)
+	{
+		if (DEBUG)
+			cerr << "IX_IndexHandle::WriteNodes - Failed to write page " << node->pageNum << "." << endl;
+		free(page);
+		IX_PrintError(FILE_OP_ERROR);
+		return FILE_OP_ERROR;
+	}
+
+	free(page);
+	return SUCCESS;
+}
+
+/**
+ * Writes node data to file, and update page number for the node.
+ * NOTE: "nodes" is not const, since it might be updated
+ */
+template <typename KEY>
+RC IX_IndexHandle::WriteNodes(vector<BTreeNode<KEY>*> nodes)
+{
+	unsigned nodes_size = nodes.size();
+	for (unsigned nodeCnt = 0; nodeCnt < nodes_size; nodeCnt++)
 	{
 		BTreeNode<KEY> *node = nodes[nodeCnt];
-		void *page = malloc(PF_PAGE_SIZE);
 
 		if (node->pageNum == -1) 	// new node
 		{
 			if (this->_free_page_num != 0)	// reuse free page
 			{
 				node->pageNum = this->_free_page_num;
+				void *page = malloc(PF_PAGE_SIZE);
 				if (this->_pf_handle->ReadPage(this->_free_page_num, page) != SUCCESS)
 				{
 					if (DEBUG)
@@ -1606,6 +1660,7 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 				}
 
 				memcpy(&this->_free_page_num, page, 4);
+				free(page);
 				if (DEBUG)
 					cout << "IX_IndexHandle::WriteNodes - Re-use free page " << node->pageNum << "; next free page is " << this->_free_page_num << "." << endl;
 			}
@@ -1620,60 +1675,43 @@ RC IX_IndexHandle::WriteNodes(const vector<BTreeNode<KEY>*> &nodes)
 			{
 				if (node->left)
 					node->left->rightPageNum = node->pageNum;
-				if (node->right)
-					node->right->leftPageNum = node->pageNum;
+				if (node->rightPageNum != -1)
+				{
+					// TODO: can be written to disk more gracefully, e.g., updating 4 bytes to disk directly
+					if (node->right)
+					{
+						node->right->leftPageNum = node->pageNum;
+						nodes.push_back(node->right);
+						nodes_size++;
+					}
+					else	// NOTE: still need to update information stored on disk
+					{
+						BTreeNode<KEY> *right = this->ReadNode<KEY>(node->rightPageNum, NodeType(1));
+						right->leftPageNum = node->pageNum;
+						nodes.push_back(right);
+					}
+				}
 			}
 			if (DEBUG)
 				cout << "IX_IndexHandle::WriteNodes - New page will be written on page " << node->pageNum << "." << endl;
 		}
 
 		// update page data
-		unsigned offset = 0;
-		unsigned size = node->keys.size();
-		memcpy(page, &size, 4);
-		offset += 4;
-
-		if (node->type == NodeType(1))	// leaf node
-		{
-			memcpy((char *)page + offset, &node->leftPageNum, PAGE_NUM_LENGTH);
-			offset += PAGE_NUM_LENGTH;
-			memcpy((char *)page + offset, &node->rightPageNum, PAGE_NUM_LENGTH);
-			offset += PAGE_NUM_LENGTH;
-
-			for (unsigned index = 0; index < node->keys.size(); index++)
-			{
-				memcpy((char *)page + offset, &node->keys[index], KEY_LENGTH);
-				offset += KEY_LENGTH;
-				memcpy((char *)page + offset, &node->rids[index], RID_LENGTH);
-				offset += RID_LENGTH;
-			}
-		}
-		else	// non-leaf node
-		{
-			for (unsigned index = 0; index < node->keys.size(); index++)
-			{
-				memcpy((char *)page + offset, &node->childrenPageNums[index], PAGE_NUM_LENGTH);
-				offset += PAGE_NUM_LENGTH;
-				memcpy((char *)page + offset, &node->keys[index], KEY_LENGTH);
-				offset += KEY_LENGTH;
-			}
-			if (node->childrenPageNums.size() > 1)
-				memcpy((char *)page + offset, &node->childrenPageNums[node->childrenPageNums.size() - 1], PAGE_NUM_LENGTH);
-		}
-
-		if (this->_pf_handle->WritePage(node->pageNum, page) != SUCCESS)
-		{
-			if (DEBUG)
-				cerr << "IX_IndexHandle::WriteNodes - Failed to write page " << node->pageNum << "." << endl;
-			free(page);
-			IX_PrintError(FILE_OP_ERROR);
-			return FILE_OP_ERROR;
-		}
-
-		free(page);
+		this->WriteNode(node);
 		if (DEBUG)
 			cout << "IX_IndexHandle::WriteNodes - Wrote one " << (node->type == NodeType(1) ? "leaf" : "non-leaf") << " node on page " << node->pageNum << "." << endl;
 	}
+
+	// update extra nodes (new added nodes' right leaf nodes just read for updates of leftPageNum) if necessary
+	if (nodes_size < nodes.size())
+	{
+		for (unsigned i = nodes_size; i < nodes.size(); ++i)
+		{
+			this->WriteNode(nodes[i]);
+			delete nodes[i];
+		}
+	}
+
 	return SUCCESS;
 }
 

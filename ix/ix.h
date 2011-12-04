@@ -100,7 +100,7 @@ public:
 	RC DeleteEntry(const KEY key,const RID &rid);
 	RC DeleteTree(BTreeNode<KEY> *Node);
 
-	vector<BTreeNode<KEY>*> GetUpdatedNodes() const;
+	vector<BTreeNode<KEY>*> GetUpdatedNodes();
 	vector<unsigned> GetDeletedPageNums() const;
 	void ClearPendingNodes();
 
@@ -191,7 +191,7 @@ class IX_IndexHandle {
   template <typename KEY>
   BTreeNode<KEY>* ReadNode(const unsigned pageNum, const NodeType nodeType);
   template <typename KEY>
-  RC WriteNodes(const vector<BTreeNode<KEY>*> &nodes);
+  RC WriteNodes(vector<BTreeNode<KEY>*> nodes);
   RC WriteDeletedNodes(const vector<unsigned> &_deleted_pagenums);
   RC LoadMetadata();
   template <typename KEY>
@@ -208,6 +208,8 @@ class IX_IndexHandle {
   RC GetLeftEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid);
   template <typename KEY>
   RC GetRightEntry(const BTreeNode<KEY> *node, const unsigned pos, void *key, RID &rid);
+  template <typename KEY>
+  RC WriteNode(BTreeNode<KEY> *node);
 
  private:
   PF_FileHandle *_pf_handle;
