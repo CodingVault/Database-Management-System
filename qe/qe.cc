@@ -149,15 +149,8 @@ NLJoin::NLJoin(Iterator *leftIn,                      // Iterator of input R
         TableScan *rightIn,                           // TableScan Iterator of input S
         const Condition &condition,                   // Join condition
         const unsigned numPages                       // Number of pages can be used to do join (decided by the optimizer)
- )
+ ) : _left(leftIn), _right(rightIn), _condition(condition), _numPages(numPages), _leftTuple(NULL), _leftValue(NULL)
 {
-	this->_left = leftIn;
-	this->_right = rightIn;
-	this->_condition = condition;
-	this->_numPages = numPages;
-	this->_leftTuple = NULL;
-	this->_leftValue = NULL;
-
 	leftIn->getAttributes(this->_leftAttrs);
 	rightIn->getAttributes(this->_rightAttrs);
 }
@@ -738,21 +731,15 @@ string itoa(const unsigned in)
 	return out;
 }
 
-HashJoin::HashJoin(Iterator *leftIn,                              // Iterator of input R
-                 Iterator *rightIn,                               // Iterator of input S
-                 const Condition &condition,                      // Join condition
-                 const unsigned numPages)
+HashJoin::HashJoin(Iterator *leftIn,                     // Iterator of input R
+		Iterator *rightIn,                               // Iterator of input S
+		const Condition &condition,                      // Join condition
+		const unsigned numPages) :
+		leftIn(leftIn), rightIn(rightIn), condition(condition), htSize(numPages - 1),
+		bktSize(numPages - 1), bktNumPtr(0), leftBktPageNum(0), leftBktPageOffset(sizeof(int))
 {
-	this->leftIn = leftIn;
-	this->rightIn = rightIn;
-	this->condition = condition;
-	this->bufferSize = numPages;	// TODO: should be fewer due to other use of memory???
 	this->leftIn->getAttributes(this->left_attrs);
 	this->rightIn->getAttributes(this->right_attrs);
-
-	this->bktNum = 0;
-	this->leftBktPageNum = 0;
-	this->leftBktPageOffset = sizeof(int);
 
 	for (unsigned i = 0; i < this->left_attrs.size(); i++)
 	{
@@ -780,25 +767,25 @@ HashJoin::~HashJoin()
  */
 RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const string &attr, const string file_prefix)
 {
-	void* data = malloc(PF_PAGE_SIZE);
-	char* attr_data = (char *) malloc(PF_PAGE_SIZE);
-
-	PF_Manager* pf_manager = PF_Manager::Instance();
 	Bucket defQ;
 	defQ.length = sizeof(int);	// space to store last offset of data in bucket
 	defQ.data = NULL;
-	vector<Bucket> buckets(this->bufferSize, defQ);
+	vector<Bucket> buckets(this->bktSize, defQ);	// need one page of memory to read data
 
 	// create empty files for each bucket of left table	// TODO: create files when necessary
-	for (unsigned i = 0; i < this->bufferSize; i++)
+	PF_Manager* pf_manager = PF_Manager::Instance();
+	for (unsigned i = 0; i < this->bktSize; i++)
 		pf_manager->CreateFile((file_prefix + itoa(i)).c_str());
 
 	unsigned count = 0;
+	void* data = malloc(PF_PAGE_SIZE);
 	while (iterator->getNextTuple(data) != QE_EOF)
 	{
-		getAttrValue(data, attr_data, attrs, attr);
-		unsigned hashNum = getHash(attr_data, this->attrType, this->bufferSize);
 		unsigned length = getLength(data, attrs);
+		char* attr_data = (char *) malloc(length);
+		getAttrValue(data, attr_data, attrs, attr);
+		unsigned hashNum = getHash(attr_data, this->attrType, this->bktSize);
+		free(attr_data);
 
 		// if the bucket is full, write it to disk
 		if (buckets[hashNum].length + length > PF_PAGE_SIZE)
@@ -817,18 +804,16 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 			}
 		}
 	}
+	free(data);
 	if (DEBUG)
 		cout << "HashJoin::partition - Hashed " << count << " tuples in total." << endl;
 
 	// flush rest data in the buffer to disk
-	for (unsigned i = 0; i < this->bufferSize; ++i)
+	for (unsigned i = 0; i < this->bktSize; ++i)
 	{
 		if (buckets[i].data != NULL)
 			this->writeBucket(buckets, i, file_prefix);
 	}
-
-	free(attr_data);
-	free(data);
 
 	return SUCCESS;
 }
@@ -864,10 +849,10 @@ RC HashJoin::getNextTuple(void* data)
 	PF_FileHandle right_filehandle;
 	PF_FileHandle left_filehandle;
 
-	while (this->bktNum < this->bufferSize)
+	while (this->bktNumPtr < this->bktSize)
 	{
-		string right_fileName = RIGHT_PARTITION_PREFIX + itoa(this->bktNum);
-		string left_fileName = LEFT_PARTITION_PREFIX + itoa(this->bktNum);
+		string right_fileName = RIGHT_PARTITION_PREFIX + itoa(this->bktNumPtr);
+		string left_fileName = LEFT_PARTITION_PREFIX + itoa(this->bktNumPtr);
 
 		// find one bucket containing data from the smaller table
 		pf_manager->OpenFile(right_fileName.c_str(), right_filehandle);
@@ -876,7 +861,7 @@ RC HashJoin::getNextTuple(void* data)
 			pf_manager->CloseFile(right_filehandle);
 			pf_manager->DestroyFile(right_fileName.c_str());
 			pf_manager->DestroyFile(left_fileName.c_str());
-			this->bktNum++;
+			this->bktNumPtr++;
 			continue;
 		}
 
@@ -884,10 +869,10 @@ RC HashJoin::getNextTuple(void* data)
 		Bucket defQ;
 		defQ.length = sizeof(int);	// space to store last offset of data in bucket
 		defQ.data = NULL;
-		vector<Bucket> hash_table(this->bufferSize, defQ);
+		vector<Bucket> hash_table(this->htSize, defQ);
 		this->buildHashtable(right_filehandle, hash_table);
 		if (DEBUG)
-			cout << "HashJoin::getNextTuple - Put bucket [" << this->bktNum << "] of smaller table in memory." << endl;
+			cout << "HashJoin::getNextTuple - Put bucket [" << this->bktNumPtr << "] of smaller table in memory." << endl;
 
 		// retrieve tuples from the bigger table to perform join
 		pf_manager->OpenFile(left_fileName.c_str(), left_filehandle);
@@ -913,7 +898,7 @@ RC HashJoin::getNextTuple(void* data)
 				if (rc == SUCCESS)
 				{
 					free(page);
-					for (unsigned i = 0; i < this->bufferSize; ++i)
+					for (unsigned i = 0; i < this->htSize; ++i)
 						if (hash_table[i].data)
 							free(hash_table[i].data);
 
@@ -927,17 +912,17 @@ RC HashJoin::getNextTuple(void* data)
 
 			free(page);
 			// resets page offset and continue to read next page
-			this->leftBktPageOffset = sizeof(int);
+			this->leftBktPageOffset = sizeof(int);	// space to store last offset of data in bucket
 			this->leftBktPageNum++;
 		}
 
-		for (unsigned i = 0; i < this->bufferSize; ++i)
+		for (unsigned i = 0; i < this->htSize; ++i)
 			if (hash_table[i].data)
 				free(hash_table[i].data);
 
 		// no valid join tuple found; resets page number and continue to read next bucket
 		this->leftBktPageNum = 0;
-		this->bktNum++;
+		this->bktNumPtr++;
 
 		// close bucket files and remove them
 		pf_manager->CloseFile(left_filehandle);
@@ -957,7 +942,7 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 	// hash left attribute in condition
 	char *left_attr_data = (char *) malloc(left_tuple_length);
 	getAttrValue(left_tuple, left_attr_data, this->left_attrs, this->condition.lhsAttr);
-	unsigned hashNum = getHash(left_attr_data, this->attrType, this->bufferSize);	// TODO: !!! update it to another hash function !!!
+	unsigned hashNum = getHash(left_attr_data, this->attrType, this->htSize);	// TODO: !!! update it to another hash function !!!
 
 	// if cannot be found in hash table, return
 	if (hash_table[hashNum].data == NULL)
@@ -1010,7 +995,7 @@ RC HashJoin::buildHashtable(PF_FileHandle &filehandle, vector<Bucket> &hash_tabl
 		unsigned size = 0;
 		memcpy(&size, page, sizeof(int));
 
-		unsigned offset = sizeof(int);
+		unsigned offset = sizeof(int);	// space to store last offset of data in bucket
 		while (offset < size)
 		{
 			unsigned length = getLength((char *)page + offset, this->right_attrs);
@@ -1020,7 +1005,7 @@ RC HashJoin::buildHashtable(PF_FileHandle &filehandle, vector<Bucket> &hash_tabl
 
 			char *attr_data = (char *) malloc(length);
 			getAttrValue(tuple, attr_data, this->right_attrs, this->condition.rhsAttr);
-			unsigned hashNum = getHash(attr_data, this->attrType, this->bufferSize);	// TODO: !!! update it to another hash function !!!
+			unsigned hashNum = getHash(attr_data, this->attrType, this->htSize);	// TODO: !!! update it to another hash function !!!
 			hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].length + length);
 			memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].length, tuple, length);
 			hash_table[hashNum].length += length;

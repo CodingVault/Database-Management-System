@@ -285,12 +285,14 @@ class HashJoin : public Iterator {
         Iterator* leftIn;
         Iterator* rightIn;
         Condition condition;
-        unsigned bufferSize;
+        unsigned htSize;
+        unsigned bktSize;
+
         AttrType attrType;
         vector<Attribute> left_attrs;
         vector<Attribute> right_attrs;
 
-        unsigned bktNum;
+        unsigned bktNumPtr;
         unsigned leftBktPageNum;
         unsigned leftBktPageOffset;
 };
