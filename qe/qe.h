@@ -39,7 +39,7 @@ struct Buff {
 };
 
 struct Bucket {
-	unsigned offset;
+	unsigned length;
 	void     *data;
 };
 

@@ -402,9 +402,9 @@ void testCase_3()
     while(project.getNextTuple(data) != QE_EOF)
     {
         int offset = 0;
- 
+
         // Print right.C
-        cout << "left.C " << *(float *)((char *)data + offset) << endl;
+        cout << "right.C " << *(float *)((char *)data + offset) << endl;
         offset += sizeof(float);
 
         // Print right.D
@@ -1098,15 +1098,40 @@ int main()
     createIndexforRightC(rightRIDs);
    
     // Test Cases
+
+    // Filter -- TableScan as input, on Integer Attribute
     testCase_1();
+
+    // Filter -- IndexScan as input, on TypeChar attribute
     testCase_2();
+
+    // Project -- TableScan as input
     testCase_3();
+
+    // NLJoin -- on TypeInt Attribute
     testCase_4();
+
+    // INLJoin -- on TypeChar Attribute
     testCase_5();
+
+    // HashJoin -- on TypeInt Attribute
     testCase_6();
+
+    // 1. INLJoin -- on TypeInt Attribute
+    // 2. Filter -- on TypeInt Attribute
     testCase_7();
+
+    // 1. HashJoin -- on TypeChar Attribute
+    // 2. Project
     testCase_8();
+
+    // 1. NLJoin -- on TypeChar Attribute
+    // 2. HashJoin -- on TypeInt Attribute
     testCase_9();
+
+    // 1. Filter
+    // 2. Project
+    // 3. INLJoin
     testCase_10();
 
 //    // Extra Credit

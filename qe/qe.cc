@@ -166,6 +166,8 @@ NLJoin::~NLJoin()
 {
 	if (this->_leftTuple)
 		free(this->_leftTuple);
+	if (this->_leftValue)
+		free(this->_leftValue);
 }
 
 RC NLJoin::getNextTuple(void *data)
@@ -234,13 +236,13 @@ RC NLJoin::getNextTuple(void *data)
 		printValue(rightValue, this->_attrType);
 	}
 
-	// get lengths of both tuples
-	unsigned leftLen = this->getLeftLength();
-	unsigned rightLen = this->getRightLength(rightTuple);
-
 	// compare
 	if (compare(this->_leftValue, this->_condition.op, rightValue, this->_attrType))
 	{
+		// get lengths of both tuples
+		unsigned leftLen = this->getLeftLength();
+		unsigned rightLen = this->getRightLength(rightTuple);
+
 		memcpy(data, this->_leftTuple, leftLen);
 		memcpy((char *)data + leftLen, rightTuple, rightLen);
 
@@ -783,9 +785,9 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 
 	PF_Manager* pf_manager = PF_Manager::Instance();
 	Bucket defQ;
-	defQ.offset = sizeof(int);	// space to store last offset of data in bucket
+	defQ.length = sizeof(int);	// space to store last offset of data in bucket
 	defQ.data = NULL;
-	vector<Bucket> hash_table(this->bufferSize, defQ);
+	vector<Bucket> buckets(this->bufferSize, defQ);
 
 	// create empty files for each bucket of left table	// TODO: create files when necessary
 	for (unsigned i = 0; i < this->bufferSize; i++)
@@ -799,12 +801,12 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 		unsigned length = getLength(data, attrs);
 
 		// if the bucket is full, write it to disk
-		if (hash_table[hashNum].offset + length > PF_PAGE_SIZE)
-			this->writeBucket(hash_table, hashNum, file_prefix);
+		if (buckets[hashNum].length + length > PF_PAGE_SIZE)
+			this->writeBucket(buckets, hashNum, file_prefix);
 
-		hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].offset + length);
-	    memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].offset, data, length);
-		hash_table[hashNum].offset += length;
+		buckets[hashNum].data = realloc(buckets[hashNum].data, buckets[hashNum].length + length);
+	    memcpy((char *)buckets[hashNum].data + buckets[hashNum].length, data, length);
+		buckets[hashNum].length += length;
 		if (DEBUG)
 		{
 			count++;
@@ -821,8 +823,8 @@ RC HashJoin::partition(Iterator *iterator, const vector<Attribute> &attrs, const
 	// flush rest data in the buffer to disk
 	for (unsigned i = 0; i < this->bufferSize; ++i)
 	{
-		if (hash_table[i].data != NULL)
-			this->writeBucket(hash_table, i, file_prefix);
+		if (buckets[i].data != NULL)
+			this->writeBucket(buckets, i, file_prefix);
 	}
 
 	free(attr_data);
@@ -844,14 +846,14 @@ RC HashJoin::writeBucket(vector<Bucket> &ht, const unsigned pos, const string fi
 	PF_Manager* pf_manager = PF_Manager::Instance();
 	PF_FileHandle filehandle;
 	pf_manager->OpenFile((file_prefix + itoa(pos)).c_str(), filehandle);
-	memcpy(ht[pos].data, &ht[pos].offset, sizeof(int));
+	memcpy(ht[pos].data, &ht[pos].length, sizeof(int));
 	filehandle.AppendPage(ht[pos].data);
 	pf_manager->CloseFile(filehandle);
 
 	// reset the bucket
 	free(ht[pos].data);
 	ht[pos].data = NULL;
-	ht[pos].offset = sizeof(int);
+	ht[pos].length = sizeof(int);
 
 	return SUCCESS;
 }
@@ -880,7 +882,7 @@ RC HashJoin::getNextTuple(void* data)
 
 		// build in-memory hash table for current bucket of the smaller table
 		Bucket defQ;
-		defQ.offset = sizeof(int);	// space to store last offset of data in bucket
+		defQ.length = sizeof(int);	// space to store last offset of data in bucket
 		defQ.data = NULL;
 		vector<Bucket> hash_table(this->bufferSize, defQ);
 		this->buildHashtable(right_filehandle, hash_table);
@@ -966,7 +968,7 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 
 	unsigned right_tuple_length = 0;
 	unsigned offset = sizeof(int);
-	while (offset < hash_table[hashNum].offset)
+	while (offset < hash_table[hashNum].length)
 	{
 		right_tuple_length = getLength((char *)hash_table[hashNum].data + offset, this->right_attrs);
 		void *right_tuple = malloc(right_tuple_length);
@@ -989,7 +991,7 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 	free(left_attr_data);
 
 	// found one tuple to join
-	if (offset < hash_table[hashNum].offset)
+	if (offset < hash_table[hashNum].length)
 	{
 		memcpy(data, left_tuple, left_tuple_length);
 		memcpy((char *)data + left_tuple_length, (char *)hash_table[hashNum].data + offset, right_tuple_length);
@@ -1019,9 +1021,9 @@ RC HashJoin::buildHashtable(PF_FileHandle &filehandle, vector<Bucket> &hash_tabl
 			char *attr_data = (char *) malloc(length);
 			getAttrValue(tuple, attr_data, this->right_attrs, this->condition.rhsAttr);
 			unsigned hashNum = getHash(attr_data, this->attrType, this->bufferSize);	// TODO: !!! update it to another hash function !!!
-			hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].offset + length);
-			memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].offset, tuple, length);
-			hash_table[hashNum].offset += length;
+			hash_table[hashNum].data = realloc(hash_table[hashNum].data, hash_table[hashNum].length + length);
+			memcpy((char *)hash_table[hashNum].data + hash_table[hashNum].length, tuple, length);
+			hash_table[hashNum].length += length;
 
 			free(attr_data);
 			free(tuple);
