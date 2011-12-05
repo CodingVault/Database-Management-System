@@ -1336,6 +1336,31 @@ KEY* BTree<KEY>::GetMinKey()
 }
 
 template <typename KEY>
+KEY* BTree<KEY>::GetMaxKey()
+{
+	KEY* key = NULL;
+	if (this->_root != NULL)
+	{
+		BTreeNode<KEY> *node = this->_root;
+		for (unsigned index = this->_height; index > 1; index--)
+		{
+			unsigned chld_size = node->children.size();
+			if (node->children[chld_size - 1] == NULL)
+			{
+				NodeType nodeType = index > 2 ? NodeType(0) : NodeType(1);
+				node->children[chld_size - 1] = this->_func_ReadNode(node->childrenPageNums[chld_size - 1], nodeType);
+			}
+			node = node->children[chld_size - 1];
+		}
+
+		key = &(node->keys[node->keys.size() - 1]);
+		if (DEBUG)
+			cout << "BTree<KEY>::GetMaxKey - Maximum key in current index is " << *key << "." << endl;
+	}
+	return key;
+}
+
+template <typename KEY>
 KEY* BTree<KEY>::GetMinKey(BTreeNode<KEY>* subTree,unsigned subTreeHeight)
 {
 	KEY* key = NULL;
@@ -2055,6 +2080,27 @@ RC IX_IndexHandle::GetMinKey(void *key)
     return SUCCESS;
 }
 
+RC IX_IndexHandle::GetMaxKey(void *key)
+{
+	if (DEBUG)
+		cout << "IX_IndexHandle::GetMaxKey - Getting maximum key in current index." << endl;
+    if (this->_key_type == TypeInt)
+	{
+    	int* iKey = this->_int_index->GetMaxKey();
+    	if (iKey == NULL)
+    		return EMPTY_TREE;
+    	memcpy(key, iKey, 4);
+	}
+	else if (this->_key_type == TypeReal)
+	{
+		float* fKey = this->_float_index->GetMaxKey();
+    	if (fKey == NULL)
+    		return EMPTY_TREE;
+		memcpy(key, fKey, 4);
+	}
+    return SUCCESS;
+}
+
 RC IX_IndexHandle::Open(PF_FileHandle *handle)
 {
 	if (this->_pf_handle != NULL)
@@ -2233,6 +2279,37 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 	// otherwise, input is invalid or the end has been met
 	if (this->keyValue == NULL)
 		return END_OF_SCAN;
+	cout << "== KEY: " << *(float *)this->keyValue << endl;
+
+	if (this->compOp == LE_OP)
+	{
+		void *maxKey = malloc(4);
+		RC rc = this->indexHandle->GetMaxKey(maxKey);
+		if (rc != SUCCESS)
+		{
+			if (rc == EMPTY_TREE)
+				return END_OF_SCAN;
+			else
+				return rc;
+		}
+		if (compare(this->keyValue, GT_OP, maxKey, this->indexHandle->GetKeyType()))
+			memcpy(this->keyValue, maxKey, 4);
+	}
+
+	if (this->compOp == GE_OP)
+	{
+		void *minKey = malloc(4);
+		RC rc = this->indexHandle->GetMinKey(this->keyValue);
+		if (rc != SUCCESS)
+		{
+			if (rc == EMPTY_TREE)
+				return END_OF_SCAN;
+			else
+				return rc;
+		}
+		if (compare(this->keyValue, LT_OP, minKey, this->indexHandle->GetKeyType()))
+			memcpy(this->keyValue, minKey, 4);
+	}
 
 	// transform LE_OP to (EQ_OP + LT_OP) and GT_OP to (EQ_OP + GT_OP)
 	CompOp op = (this->compOp == LE_OP || this->compOp == GE_OP) ? EQ_OP : this->compOp;

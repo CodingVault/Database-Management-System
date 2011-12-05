@@ -107,6 +107,7 @@ public:
 	BTreeNode<KEY>* GetRoot() const;
 	unsigned GetHeight() const;
 	KEY* GetMinKey();
+	KEY* GetMaxKey();
 
 protected:
 	BTree();
@@ -176,6 +177,7 @@ class IX_IndexHandle {
   RC DeleteEntry(void *key, const RID &rid);  // Delete index entry
   RC GetEntry(void *key, const CompOp compOp, RID &rid);
   RC GetMinKey(void *key);
+  RC GetMaxKey(void *key);
 
   RC Open(PF_FileHandle *handle);
   RC Close();
