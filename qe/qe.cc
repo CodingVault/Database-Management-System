@@ -485,13 +485,16 @@ RC Filter::getNextTuple(void *data)
 		// analyze the tuple
 		getAttrValue(data, attr_data, this->attrs, this->condition.lhsAttr);
 
-		unsigned rightLen = sizeof(int);
+		unsigned offset = 0;
 		if (this->condition.rhsValue.type == TypeVarChar)
-			rightLen += *(int *)this->condition.rhsValue.data;
-		*((char *)this->condition.rhsValue.data + rightLen) = '\0';
+		{
+			offset = sizeof(int);
+			unsigned rightLen = *(int *)this->condition.rhsValue.data;
+			*((char *)this->condition.rhsValue.data + rightLen) = '\0';
+		}
 
 		if( compare(attr_data, this->condition.op,
-				this->condition.rhsValue.data, this->condition.rhsValue.type) )
+				(char *)this->condition.rhsValue.data + offset, this->condition.rhsValue.type) )
 		{
 			return 0;
 		}
@@ -541,14 +544,25 @@ INLJoin::INLJoin (Iterator *leftIn,                               // Iterator of
 
 RC INLJoin::openIndexScan(void *value)
 {
-	// TODO: !!! other operations?
-	switch (this->condition.op)
+	CompOp op = this->condition.op;
+	switch(this->condition.op)
 	{
-	case EQ_OP:
-		this->rightIn->setIterator(EQ_OP, value);
+	case GE_OP:
+		op = LE_OP;
+		break;
+	case LE_OP:
+		op = GE_OP;
+		break;
+	case LT_OP:
+		op = GT_OP;
+		break;
+	case GT_OP:
+		op = LT_OP;
+		break;
+	default:
 		break;
 	}
-
+	this->rightIn->setIterator(op, value);
 	return SUCCESS;
 }
 
