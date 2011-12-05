@@ -56,6 +56,43 @@ void printTuples(void *data, const vector<Attribute> &attrs)
 	cout << "****Printing tuple end****" << endl << endl;
 }
 
+unsigned getLength(void* data, vector<Attribute> attrs)
+{
+	unsigned offset = 0;
+
+	for (unsigned i = 0; i < attrs.size(); ++i)
+	{
+		unsigned shift = sizeof(int);
+		if (attrs[i].type == TypeVarChar)
+		{
+			unsigned len = 0;
+			memcpy(&len, (char *)data + offset, sizeof(int));
+			shift += len;
+		}
+		offset += shift;
+	}
+
+	return offset;
+
+}
+
+string itoa(const unsigned in)
+{
+	const unsigned zero = 48;
+	unsigned copy = in + 1;
+	string out = "";
+
+	while (copy > 0)
+	{
+		unsigned digit = copy % 10;
+		copy /= 10;
+
+		out = (char)(zero + digit) + out;
+	}
+
+	return out;
+}
+
 /************************* Project Begin *************************/
 
 Project::Project(Iterator *input, const vector<string> &attrNames)
@@ -568,32 +605,10 @@ RC INLJoin::openIndexScan(void *value)
 
 void joinTuples(void* output, void* lInput, void* rInput, vector<Attribute>lAttrs,vector<Attribute>rAttrs )
 {
-	unsigned lLength = 0, rLength = 0, i = 0;
-	for(i = 0; i < lAttrs.size(); i++)
-	{// write the left tuple
-		if(lAttrs[i].type == TypeInt || lAttrs[i].type == TypeReal)
-		{
-			lLength += 4;
-		}
-		else
-		{
-			lLength += *((int*)(lInput) + lLength) + 4;
-		}
-	}
-
+	unsigned lLength = getLength(lInput, lAttrs);
 	memcpy(output, lInput,lLength);
 
-	for(i = 0; i < rAttrs.size(); i++)
-	{// write the left tuple
-		if(rAttrs[i].type == TypeInt || rAttrs[i].type == TypeReal)
-		{
-			rLength += 4;
-		}
-		else
-		{
-			rLength += *((int*)(rInput) + rLength) + 4;
-		}
-	}
+	unsigned rLength = getLength(rInput, rAttrs);
 	memcpy((char*)output+lLength, (char*)rInput,rLength);
 }
 
@@ -721,43 +736,6 @@ unsigned getJoinHash(char* value, AttrType type, unsigned M)
 		return getStringHash(value, 2 * M) % M;
 	}
 	return 0;
-}
-
-unsigned getLength(void* data, vector<Attribute> attrs)
-{
-	unsigned offset = 0;
-
-	for (unsigned i = 0; i < attrs.size(); ++i)
-	{
-		unsigned shift = sizeof(int);
-		if (attrs[i].type == TypeVarChar)
-		{
-			unsigned len = 0;
-			memcpy(&len, (char *)data + offset, sizeof(int));
-			shift += len;
-		}
-		offset += shift;
-	}
-
-	return offset;
-
-}
-
-string itoa(const unsigned in)
-{
-	const unsigned zero = 48;
-	unsigned copy = in + 1;
-	string out = "";
-
-	while (copy > 0)
-	{
-		unsigned digit = copy % 10;
-		copy /= 10;
-
-		out = (char)(zero + digit) + out;
-	}
-
-	return out;
 }
 
 HashJoin::HashJoin(Iterator *leftIn,                     // Iterator of input R
