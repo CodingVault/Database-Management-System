@@ -2279,7 +2279,6 @@ RC IX_IndexScan::GetNextEntry(RID &rid)
 	// otherwise, input is invalid or the end has been met
 	if (this->keyValue == NULL)
 		return END_OF_SCAN;
-	cout << "== KEY: " << *(float *)this->keyValue << endl;
 
 	if (this->compOp == LE_OP)
 	{
