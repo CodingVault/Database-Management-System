@@ -5,19 +5,22 @@
 
 void printValue(void *value, const AttrType &attrType)
 {
+	unsigned len = 0;
 	switch (attrType)
 	{
 	case TypeInt:
-		cout << "(INT) ";
-		cout << *(int *)value << endl;
+		cout << "(INT) " << *(int *)value << endl;
 		break;
 	case TypeReal:
-		cout << "(REAL) ";
-		cout << *(float *)value << endl;
+		cout << "(REAL) " << *(float *)value << endl;
 		break;
 	case TypeVarChar:
-		cout << "(VAR_CHAR) ";
-		cout << (char *)value << endl;
+		memcpy(&len, (char *)value, sizeof(int));
+		char *temp = (char *) malloc(len + 1);
+		memcpy(temp, (char *)value + sizeof(int), len);
+		temp[len] = '\0';
+		cout << "(REAL) " << temp << endl;
+		free(temp);
 		break;
 	}
 }
@@ -45,11 +48,12 @@ void printTuples(void *data, const vector<Attribute> &attrs)
 		case TypeVarChar:
 			memcpy(&iValue, (char *)data + offset, sizeof(int));
 			offset += sizeof(int);
-			char *temp = (char *)malloc(iValue);
+			char *temp = (char *)malloc(iValue + 1);
 			memcpy(temp, (char *)data + offset, iValue);
 			offset += iValue;
 			temp[iValue] = '\0';
 			cout << attrs[i].name << ": " << temp << endl;
+			free(temp);
 			break;
 		}
 	}
