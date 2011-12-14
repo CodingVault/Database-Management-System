@@ -531,7 +531,7 @@ RC Filter::getNextTuple(void *data)
 		{
 			offset = sizeof(int);
 			unsigned rightLen = *(int *)this->condition.rhsValue.data;
-			*((char *)this->condition.rhsValue.data + rightLen) = '\0';
+			*((char *)this->condition.rhsValue.data + offset + rightLen) = '\0';
 		}
 
 		if( compare(attr_data, this->condition.op,
