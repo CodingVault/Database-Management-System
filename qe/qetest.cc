@@ -932,6 +932,198 @@ void testCase_10()
     return;
 }
 
+void extraTest1()
+{
+    // Create Filters
+    IX_IndexHandle ixLeftHandle1;
+    ixManager->OpenIndex("left", "B", ixLeftHandle1);
+    IndexScan *leftIn1 = new IndexScan(*rm, ixLeftHandle1, "left");
+
+    Condition cond_f_plus;
+    cond_f_plus.lhsAttr = "left.B";
+    cond_f_plus.op = GE_OP;
+    cond_f_plus.bRhsIsAttr = false;
+    Value value1;
+    value1.type = TypeInt;
+    value1.data = malloc(bufsize);
+    *(int *)value1.data = 500;
+    cond_f_plus.rhsValue = value1;
+
+    int key = 300;
+    leftIn1->setIterator(GE_OP, &key);
+    Filter *filter500plus = new Filter(leftIn1, cond_f_plus);
+    cout << "==== Done Filter 1" << endl;
+
+    IX_IndexHandle ixLeftHandle2;
+    ixManager->OpenIndex("left", "B", ixLeftHandle2);
+    IndexScan *leftIn2 = new IndexScan(*rm, ixLeftHandle2, "left");
+
+    Condition cond_f_minus;
+    cond_f_minus.lhsAttr = "left.B";
+    cond_f_minus.op = LT_OP;
+    cond_f_minus.bRhsIsAttr = false;
+    Value value2;
+    value2.type = TypeInt;
+    value2.data = malloc(bufsize);
+    *(int *)value2.data = 500;
+    cond_f_minus.rhsValue = value2;
+
+    key = 600;
+    leftIn2->setIterator(LT_OP, &key);
+    Filter *filter499minus = new Filter(leftIn2, cond_f_minus);
+    cout << "==== Done Filter 2" << endl;
+
+    // Create INLJoin
+    IX_IndexHandle ixRightHandle;
+    ixManager->OpenIndex("right", "C", ixRightHandle);
+    IndexScan *ixRightIn = new IndexScan(*rm, ixRightHandle, "right");
+
+    Condition cond_inlj;
+    cond_inlj.lhsAttr = "left.C";
+    cond_inlj.op = EQ_OP;
+    cond_inlj.bRhsIsAttr = true;
+    cond_inlj.rhsAttr = "right.C";
+
+    INLJoin *inljoin = new INLJoin(filter500plus, ixRightIn, cond_inlj, 10);
+    cout << "==== Done INLJoin." << endl;
+
+    // Create NLJoin
+    TableScan *rightIn = new TableScan(*rm, "right", "right2");
+
+    Condition cond_nlj;
+    cond_nlj.lhsAttr = "left.C";
+    cond_nlj.op= EQ_OP;
+    cond_nlj.bRhsIsAttr = true;
+    cond_nlj.rhsAttr = "right2.C";
+
+    NLJoin *nljoin = new NLJoin(filter499minus, rightIn, cond_nlj, 10);
+    cout << "==== Done NLJoin." << endl;
+
+    // Create Projector
+    vector<string> attrNames;
+    attrNames.push_back("left.B");
+    attrNames.push_back("left.C");
+    attrNames.push_back("right.C");
+    Project *project1 = new Project(inljoin, attrNames);
+
+    vector<string> attrNames2;
+    attrNames2.push_back("left.B");
+    attrNames2.push_back("left.C");
+    attrNames2.push_back("right2.C");
+    Project *project2 = new Project(nljoin, attrNames2);
+
+    // Go over the data through iterator
+    void *data = malloc(bufsize);
+    unsigned count = 0;
+    while(project1->getNextTuple(data) != QE_EOF)
+    {
+        int offset = 0;
+
+        // Print left.B
+        cout << "left.B " << *(int *)((char *)data + offset) << endl;
+        offset += sizeof(int);
+
+        // Print left.C
+        cout << "left.C " << *(float *)((char *)data + offset) << endl;
+        offset += sizeof(float);
+
+        // Print right.C
+        cout << "right.C " << *(float *)((char *)data + offset) << endl;
+        offset += sizeof(float);
+
+        count++;
+        memset(data, 0, bufsize);
+        cout << "===========================" << endl;
+    }
+    cout << "Total tuple number: " << count << endl;
+    free(data);
+
+    data = malloc(bufsize);
+    count = 0;
+    while(project2->getNextTuple(data) != QE_EOF)
+    {
+    	if (count % 100 == 0)
+    	{
+			int offset = 0;
+
+			// Print left.B
+			cout << "left.B " << *(int *)((char *)data + offset) << endl;
+			offset += sizeof(int);
+
+			// Print left.C
+			cout << "left.C " << *(float *)((char *)data + offset) << endl;
+			offset += sizeof(float);
+
+			// Print right.C
+			cout << "right2.C " << *(float *)((char *)data + offset) << endl;
+			offset += sizeof(float);
+	        cout << "===========================" << endl;
+    	}
+
+        count++;
+        memset(data, 0, bufsize);
+    }
+    cout << "Total tuple number: " << count << endl;
+    free(data);
+
+    // final join
+    Condition cond_fj;
+    cond_fj.lhsAttr = "right.C";
+    cond_fj.op= EQ_OP;
+    cond_fj.bRhsIsAttr = true;
+    cond_fj.rhsAttr = "right2.C";
+    HashJoin hashjoin(project1, project2, cond_fj, 10);
+
+    while(hashjoin.getNextTuple(data) != QE_EOF)
+    {
+    	if (count % 50 == 0)
+    	{
+			int offset = 0;
+
+	        // Print left.B
+	        cout << "left.B " << *(int *)((char *)data + offset) << endl;
+	        offset += sizeof(int);
+
+	        // Print left.C
+	        cout << "left.C " << *(float *)((char *)data + offset) << endl;
+	        offset += sizeof(float);
+
+	        // Print right.C
+	        cout << "right.C " << *(float *)((char *)data + offset) << endl;
+	        offset += sizeof(float);
+
+			// Print left.B
+			cout << "left.B " << *(int *)((char *)data + offset) << endl;
+			offset += sizeof(int);
+
+			// Print left.C
+			cout << "left.C " << *(float *)((char *)data + offset) << endl;
+			offset += sizeof(float);
+
+			// Print right.C
+			cout << "right2.C " << *(float *)((char *)data + offset) << endl;
+			offset += sizeof(float);
+
+	        cout << "=========================== count: " << count << endl;
+    	}
+
+        count++;
+        memset(data, 0, bufsize);
+    }
+    cout << "Total tuple number: " << count << endl;
+
+    delete leftIn1;
+    delete leftIn2;
+    delete rightIn;
+    delete ixRightIn;
+    delete filter499minus;
+    delete filter500plus;
+    delete nljoin;
+    delete inljoin;
+    delete project1;
+    delete project2;
+}
+
 
 //void extraTestCase_1()
 //{
@@ -1139,6 +1331,8 @@ int main()
 //    extraTestCase_2();
 //    extraTestCase_3();
 //    extraTestCase_4();
+
+//    extraTest1();
 
     return 0;
 }
