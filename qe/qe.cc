@@ -362,7 +362,7 @@ RC NLJoin::getLeftValue()
 			if (DEBUG)
 				cout << "NLJoin::getLeftValue - Found " << this->_condition.lhsAttr << " [type: " << this->_attrType << "; length: " << len << "]" << endl;
 
-			this->_leftValue = malloc(len);
+			this->_leftValue = malloc(len + 1);
 			memcpy(this->_leftValue, (char *)this->_leftTuple + offset, len);
 			*((char *)this->_leftValue + len) = '\0';
 			return SUCCESS;
