@@ -747,7 +747,7 @@ HashJoin::HashJoin(Iterator *leftIn,                     // Iterator of input R
 		const Condition &condition,                      // Join condition
 		const unsigned numPages) :
 		leftIn(leftIn), rightIn(rightIn), condition(condition), htSize(numPages - 1),
-		bktSize(numPages - 1), bktNumPtr(0), leftBktPageNum(0), leftBktPageOffset(sizeof(int))
+		bktSize(numPages - 1), bktNumPtr(0), leftBktPageNum(0), leftBktPageOffset(sizeof(int)), hashOffset(sizeof(int))
 {
 	this->leftIn->getAttributes(this->left_attrs);
 	this->rightIn->getAttributes(this->right_attrs);
@@ -900,7 +900,6 @@ RC HashJoin::getNextTuple(void* data)
 				unsigned left_tuple_length = getLength((char *)page + this->leftBktPageOffset, this->left_attrs);
 				void *left_tuple = malloc(left_tuple_length);
 				memcpy(left_tuple, (char *)page + this->leftBktPageOffset, left_tuple_length);
-				this->leftBktPageOffset += left_tuple_length;
 
 				// join tuples
 				RC rc = this->join(left_tuple, left_tuple_length, hash_table, data);
@@ -919,6 +918,7 @@ RC HashJoin::getNextTuple(void* data)
 
 					return SUCCESS;
 				}
+				this->leftBktPageOffset += left_tuple_length;
 			}
 
 			free(page);
@@ -963,7 +963,7 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 	}
 
 	unsigned right_tuple_length = 0;
-	unsigned offset = sizeof(int);
+	unsigned offset = this->hashOffset;
 	while (offset < hash_table[hashNum].length)
 	{
 		right_tuple_length = getLength((char *)hash_table[hashNum].data + offset, this->right_attrs);
@@ -991,9 +991,11 @@ RC HashJoin::join(const void *left_tuple, const unsigned left_tuple_length, cons
 	{
 		memcpy(data, left_tuple, left_tuple_length);
 		memcpy((char *)data + left_tuple_length, (char *)hash_table[hashNum].data + offset, right_tuple_length);
+		this->hashOffset = offset + right_tuple_length;
 		return SUCCESS;
 	}
 
+	this->hashOffset = sizeof(int);
 	return NOT_FOUND;
 }
 

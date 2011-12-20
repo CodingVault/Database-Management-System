@@ -295,6 +295,7 @@ class HashJoin : public Iterator {
         unsigned bktNumPtr;
         unsigned leftBktPageNum;
         unsigned leftBktPageOffset;
+        unsigned hashOffset;
 };
 
 
