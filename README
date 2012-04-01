@@ -1,0 +1,10 @@
+This is an implementation of one virtually complete database management system, as a course project for CS222 at University of California, Irvine. It includes Page File Management (pf), Record Management (rm), Index Management (ix), and Query Engine (qe). For more detailed information, please refer to project reports in Reports directory.
+
+############## Build Instruction ##############
+
+- Modify the "CODEROOT" variable in makefile.inc to point to the root of your code base.
+
+- Go to folder "pf", "rm", "ix", and "qe", typing in:
+
+    make clean
+    make
