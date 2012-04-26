@@ -8,3 +8,9 @@ This is an implementation of one virtually complete database management system, 
 
     make clean
     make
+
+############## Functor Application ##############
+
+Conceptual understanding:
+
+The Functor class in essence wraps the context (template application) to the function that loads necessary children tree nodes for a given root node. The search function is a function over a root node. After applying the loading function as a Functor, it continues perform search on the loaded tree nodes, and in the end wraps the result again with the template application context.
